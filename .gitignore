@@ -1,1 +1,24 @@
+# CMake / out-of-tree builds
 build/
+cmake-build-*/
+out/
+
+# macOS
+.DS_Store
+
+# Editors / IDEs (machine-local)
+.idea/
+.vscode/*.code-workspace
+*.swp
+*.swo
+*~
+
+# Claude Code — local overrides (keep team defaults in repo if you add them)
+.claude/settings.local.json
+
+# Debug symbols (macOS)
+*.dSYM/
+
+# Optional: root compile_commands.json when CMake exports or symlinks here for clangd.
+# Remove this line if your team commits that symlink for IDE support.
+/compile_commands.json
