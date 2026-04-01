@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake --version)",
+      "Bash(pkg-config --modversion sdl3)",
+      "Read(//usr/local/lib/**)",
+      "Bash(brew list:*)",
+      "Bash(brew info:*)",
+      "Bash(brew install:*)",
+      "Bash(cmake:*)"
+    ]
+  }
+}
