@@ -4,19 +4,33 @@ project(Asteroids)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ── SDL3 ──────────────────────────────────────────────────────────────────────
+
 find_package(SDL3 REQUIRED)
 
-# Lua (Homebrew installs headers under include/lua on Apple Silicon)
-find_path(LUA_INCLUDE_DIR lua.h
-    PATHS /opt/homebrew/include/lua /usr/local/include/lua /usr/include/lua5.4)
-find_library(LUA_LIBRARY NAMES lua lua5.5 lua5.4
-    PATHS /opt/homebrew/lib /usr/local/lib)
+# ── Luau (built from source via FetchContent) ─────────────────────────────────
 
-if(NOT LUA_INCLUDE_DIR OR NOT LUA_LIBRARY)
-    message(FATAL_ERROR "Lua not found")
-endif()
+include(FetchContent)
+
+set(LUAU_BUILD_CLI       OFF CACHE BOOL "" FORCE)
+set(LUAU_BUILD_TESTS     OFF CACHE BOOL "" FORCE)
+set(LUAU_BUILD_ANALYSIS  OFF CACHE BOOL "" FORCE)
+set(LUAU_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    luau
+    GIT_REPOSITORY https://github.com/luau-lang/luau.git
+    GIT_TAG        0.714
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(luau)
+
+# ── Executable ────────────────────────────────────────────────────────────────
 
 add_executable(asteroids src/main.cpp)
 
-target_include_directories(asteroids PRIVATE ${LUA_INCLUDE_DIR})
-target_link_libraries(asteroids PRIVATE SDL3::SDL3 ${LUA_LIBRARY})
+target_include_directories(asteroids PRIVATE
+    ${luau_SOURCE_DIR}/VM/include
+    ${luau_SOURCE_DIR}/Compiler/include)
+
+target_link_libraries(asteroids PRIVATE SDL3::SDL3 Luau.VM Luau.Compiler)

@@ -1,12 +1,15 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
-#include <lua.hpp>
+#include <lua.h>
+#include <lualib.h>
+#include <luacode.h>
 #include <sys/stat.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -367,29 +370,87 @@ static int l_app_quit(lua_State* /*L*/) {
     return 0;
 }
 
+// ─── Lua: require() ──────────────────────────────────────────────────────────
+
+static int l_require(lua_State* L) {
+    const char* modname = luaL_checkstring(L, 1);
+
+    // Return cached module if already loaded
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "loaded");
+    lua_getfield(L, -1, modname);
+    if (!lua_isnil(L, -1))
+        return 1;  // cached value on top; Lua ignores the rest
+    lua_pop(L, 1);  // pop nil
+
+    // Resolve path: basepath .. modname .. ".lua"
+    lua_getfield(L, -2, "basepath");
+    const char* base = lua_tostring(L, -1);
+    if (!base) luaL_error(L, "package.basepath not set");
+    std::string path = std::string(base) + modname + ".lua";
+    lua_pop(L, 1);
+
+    // Read source file
+    std::ifstream file(path);
+    if (!file.is_open())
+        luaL_error(L, "module '%s' not found (tried '%s')", modname, path.c_str());
+    std::string source((std::istreambuf_iterator<char>(file)),
+                        std::istreambuf_iterator<char>());
+
+    // Compile to Luau bytecode
+    size_t bytecodeSize = 0;
+    char*  bytecode     = luau_compile(source.c_str(), source.size(), nullptr, &bytecodeSize);
+    if (!bytecode) luaL_error(L, "require: out of memory compiling '%s'", modname);
+
+    // Load bytecode (compile errors surface here)
+    std::string chunkName = std::string("=") + modname;
+    int loadResult = luau_load(L, chunkName.c_str(), bytecode, bytecodeSize, 0);
+    free(bytecode);
+    if (loadResult != LUA_OK)
+        luaL_error(L, "require: load error in '%s': %s", modname, lua_tostring(L, -1));
+
+    // Execute module chunk; expect 1 return value
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+        luaL_error(L, "require: error in '%s': %s", modname, lua_tostring(L, -1));
+
+    // Modules that return nil get stored as true so we know they ran
+    if (lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+        lua_pushboolean(L, 1);
+    }
+
+    // Cache: package.loaded[modname] = result
+    // Stack: ... package, loaded, result
+    lua_pushvalue(L, -1);         // dup result
+    lua_setfield(L, -3, modname); // loaded[modname] = result; pops dup
+    lua_remove(L, -2);            // remove loaded
+    lua_remove(L, -2);            // remove package
+    return 1;
+}
+
 // ─── Register all APIs ────────────────────────────────────────────────────────
 
 static void registerAPI(lua_State* L) {
     // draw.*
     lua_newtable(L);
-    lua_pushcfunction(L, l_draw_clear);   lua_setfield(L, -2, "clear");
-    lua_pushcfunction(L, l_draw_line);    lua_setfield(L, -2, "line");
-    lua_pushcfunction(L, l_draw_circle);  lua_setfield(L, -2, "circle");
-    lua_pushcfunction(L, l_draw_poly);    lua_setfield(L, -2, "poly");
-    lua_pushcfunction(L, l_draw_char);    lua_setfield(L, -2, "char");
-    lua_pushcfunction(L, l_draw_number);  lua_setfield(L, -2, "number");
-    lua_pushcfunction(L, l_draw_present); lua_setfield(L, -2, "present");
+    lua_pushcfunction(L, l_draw_clear,   "draw.clear");   lua_setfield(L, -2, "clear");
+    lua_pushcfunction(L, l_draw_line,    "draw.line");    lua_setfield(L, -2, "line");
+    lua_pushcfunction(L, l_draw_circle,  "draw.circle");  lua_setfield(L, -2, "circle");
+    lua_pushcfunction(L, l_draw_poly,    "draw.poly");    lua_setfield(L, -2, "poly");
+    lua_pushcfunction(L, l_draw_char,    "draw.char");    lua_setfield(L, -2, "char");
+    lua_pushcfunction(L, l_draw_number,  "draw.number");  lua_setfield(L, -2, "number");
+    lua_pushcfunction(L, l_draw_present, "draw.present"); lua_setfield(L, -2, "present");
     lua_setglobal(L, "draw");
 
     // input.*
     lua_newtable(L);
-    lua_pushcfunction(L, l_input_down); lua_setfield(L, -2, "down");
+    lua_pushcfunction(L, l_input_down, "input.down"); lua_setfield(L, -2, "down");
     lua_setglobal(L, "input");
 
     // audio.*
     lua_newtable(L);
-    lua_pushcfunction(L, l_audio_play);   lua_setfield(L, -2, "play");
-    lua_pushcfunction(L, l_audio_thrust); lua_setfield(L, -2, "thrust");
+    lua_pushcfunction(L, l_audio_play,   "audio.play");   lua_setfield(L, -2, "play");
+    lua_pushcfunction(L, l_audio_thrust, "audio.thrust"); lua_setfield(L, -2, "thrust");
     lua_setglobal(L, "audio");
 
     // screen
@@ -400,8 +461,12 @@ static void registerAPI(lua_State* L) {
 
     // app.*
     lua_newtable(L);
-    lua_pushcfunction(L, l_app_quit); lua_setfield(L, -2, "quit");
+    lua_pushcfunction(L, l_app_quit, "app.quit"); lua_setfield(L, -2, "quit");
     lua_setglobal(L, "app");
+
+    // require
+    lua_pushcfunction(L, l_require, "require");
+    lua_setglobal(L, "require");
 }
 
 // ─── Lua helpers ──────────────────────────────────────────────────────────────
@@ -412,14 +477,55 @@ static time_t fileMtime(const std::string& path) {
 }
 
 static lua_State* createLuaState(const std::string& scriptPath) {
+    // Read source from disk
+    std::ifstream file(scriptPath);
+    if (!file.is_open()) {
+        SDL_Log("Cannot open script: %s", scriptPath.c_str());
+        return nullptr;
+    }
+    std::string source((std::istreambuf_iterator<char>(file)),
+                        std::istreambuf_iterator<char>());
+
+    // Derive script directory so require() can find sibling modules
+    std::string baseDir = scriptPath;
+    size_t slash = baseDir.find_last_of("/\\");
+    baseDir = (slash != std::string::npos) ? baseDir.substr(0, slash + 1) : "./";
+
+    // Compile source to Luau bytecode
+    size_t bytecodeSize = 0;
+    char*  bytecode     = luau_compile(source.c_str(), source.size(), nullptr, &bytecodeSize);
+    if (!bytecode) {
+        SDL_Log("Luau compile: out of memory");
+        return nullptr;
+    }
+
+    // Set up state and load bytecode
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);
     registerAPI(L);
-    if (luaL_dofile(L, scriptPath.c_str()) != LUA_OK) {
-        SDL_Log("Lua load error: %s", lua_tostring(L, -1));
+
+    // package table used by require()
+    lua_newtable(L);
+    lua_newtable(L);                            lua_setfield(L, -2, "loaded");
+    lua_pushstring(L, baseDir.c_str());         lua_setfield(L, -2, "basepath");
+    lua_setglobal(L, "package");
+
+    int loadResult = luau_load(L, scriptPath.c_str(), bytecode, bytecodeSize, 0);
+    free(bytecode);
+
+    if (loadResult != 0) {
+        SDL_Log("Luau load error: %s", lua_tostring(L, -1));
         lua_close(L);
         return nullptr;
     }
+
+    // Execute top-level chunk (defines all functions / runs init code)
+    if (lua_pcall(L, 0, 0, 0) != 0) {
+        SDL_Log("Luau exec error: %s", lua_tostring(L, -1));
+        lua_close(L);
+        return nullptr;
+    }
+
     return L;
 }
 
@@ -461,7 +567,7 @@ int main(int /*argc*/, char* argv[]) {
 
     // ── Lua setup ─────────────────────────────────────────────────────────
     std::string scriptPath = SDL_GetBasePath();
-    scriptPath += "../game.lua";
+    scriptPath += "../lua/game.lua";
 
     lua_State* L = createLuaState(scriptPath);
     if (!L) {
@@ -469,7 +575,7 @@ int main(int /*argc*/, char* argv[]) {
         return 1;
     }
 
-    luaCall(L, "game_init", 0, 0);
+    luaCall(L, "_init", 0, 0);
 
     // ── Game loop ─────────────────────────────────────────────────────────
     float  totalTime   = 0;
@@ -505,7 +611,7 @@ int main(int /*argc*/, char* argv[]) {
                 }
                 if (keyName) {
                     lua_pushstring(L, keyName);
-                    luaCall(L, "game_on_keydown", 1, 0);
+                    luaCall(L, "_on_keydown", 1, 0);
                 }
             }
         }
@@ -523,7 +629,7 @@ int main(int /*argc*/, char* argv[]) {
                 if (newL) {
                     lua_close(L);
                     L = newL;
-                    luaCall(L, "game_init", 0, 0);
+                    luaCall(L, "_init", 0, 0);
                     SDL_Log("game.lua reloaded");
                 }
                 // on failure: keep running with the old state
@@ -532,10 +638,10 @@ int main(int /*argc*/, char* argv[]) {
 
         lua_pushnumber(L, dt);
         lua_pushnumber(L, totalTime);
-        luaCall(L, "game_update", 2, 0);
+        luaCall(L, "_update", 2, 0);
 
         lua_pushnumber(L, totalTime);
-        luaCall(L, "game_render", 1, 0);
+        luaCall(L, "_render", 1, 0);
     }
 
     lua_close(L);

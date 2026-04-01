@@ -9,7 +9,8 @@
       "Bash(brew install:*)",
       "Bash(cmake:*)",
       "Bash(pkg-config --cflags --libs lua5.5)",
-      "Bash(pkg-config --cflags --libs lua)"
+      "Bash(pkg-config --cflags --libs lua)",
+      "Bash(make build:*)"
     ]
   }
 }

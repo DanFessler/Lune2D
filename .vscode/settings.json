@@ -1,4 +1,8 @@
 {
+  "luau-lsp.platform.type": "standard",
+  "luau-lsp.types.definitionFiles": {
+    "engine": "src/engine.d.luau"
+  },
   "workbench.colorCustomizations": {
     "activityBar.background": "#293106",
     "titleBar.activeBackground": "#3A4409",
