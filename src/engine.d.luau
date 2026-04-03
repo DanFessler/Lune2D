@@ -5,6 +5,7 @@
 export type Point   = { number }   -- {x, y} positional pair
 export type Polygon = { Point }
 
+-- w/h match #game-surface layout size when inset is active (e.g. 756×532), else full window logical.
 declare screen: { w: number, h: number }
 
 declare draw: {

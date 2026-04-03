@@ -1,0 +1,81 @@
+/* Shell: fill WKWebView; game column stays transparent for SDL */
+.hud-shell {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.hud-dock {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-dock > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Side panels: readable chrome */
+.panel-placeholder {
+  padding: 12px 14px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.panel-placeholder p {
+  margin: 0 0 8px;
+  color: var(--dockable-colors-text, rgb(200, 207, 211));
+}
+
+.panel-placeholder .muted {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 0;
+}
+
+.panel-placeholder a {
+  color: var(--dockable-colors-selected, rgb(46, 104, 162));
+}
+
+/* Center column: transparent "hole" for native game (see useGameRectBridge #game-surface) */
+.game-dock-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: transparent !important;
+}
+
+#game-surface {
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  background: transparent !important;
+  border: 3px solid var(--dockable-colors-headers);
+  pointer-events: none;
+}
+
+/*
+ * react-dockable gives window shells and tab bodies opaque theme colors.
+ * Strip backgrounds only on the subtree that hosts .game-dock-body (center column).
+ */
+.hud-dock div:has(.game-dock-body) {
+  background: transparent !important;
+}
+
+.hud-dock div:has(> .game-dock-body) {
+  background: transparent !important;
+}
+
+/* Inset gloss ring from dockable can read as fog over SDL; drop it for the game column */
+.hud-dock div:has(.game-dock-body)::after {
+  display: none !important;
+}

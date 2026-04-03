@@ -43,8 +43,6 @@ type Bullet = {
 -- ─── Constants ────────────────────────────────────────────────────────────────
 
 local PI: number = math.pi
-local W: number  = screen.w
-local H: number  = screen.h
 
 local SHIP_ROT_SPD:   number = 200
 local SHIP_THRUST:    number = 250
@@ -72,11 +70,34 @@ local function randf(lo: number, hi: number): number
 end
 
 local function wrap(x: number, y: number): (number, number)
+    local W, H = screen.w, screen.h
     if x < 0 then x += W end
     if x > W then x -= W end
     if y < 0 then y += H end
     if y > H then y -= H end
     return x, y
+end
+
+-- Torus draw: 3×3 lattice (−W,0,+W × −H,0,+H) so entities can appear on both
+-- sides of a wrap (up to all four corners) while logic stays in one period.
+local function drawPolyWrapped(shape: Polygon, x: number, y: number, angle: number,
+    r: number, g: number, b: number, a: number)
+    local W, H = screen.w, screen.h
+    for ox = -W, W, W do
+        for oy = -H, H, H do
+            draw.poly(shape, x + ox, y + oy, angle, r, g, b, a)
+        end
+    end
+end
+
+local function drawCircleWrapped(cx: number, cy: number, radius: number,
+    r: number, g: number, b: number, a: number)
+    local W, H = screen.w, screen.h
+    for ox = -W, W, W do
+        for oy = -H, H, H do
+            draw.circle(cx + ox, cy + oy, radius, r, g, b, a)
+        end
+    end
 end
 
 local function dist2(ax: number, ay: number, bx: number, by: number): number
@@ -86,7 +107,7 @@ end
 
 -- ─── Game state ───────────────────────────────────────────────────────────────
 
-local ship: Ship = { x=W/2, y=H/2, vx=0, vy=0, angle=270, thrusting=false,
+local ship: Ship = { x=screen.w/2, y=screen.h/2, vx=0, vy=0, angle=270, thrusting=false,
                      shootTimer=0, respawnTimer=0, alive=true, lives=3 }
 local bullets: { Bullet }     = {}
 local asteroids: { Asteroid } = {}
@@ -101,7 +122,7 @@ local fpsFrames: number = 0
 local fpsAccum: number  = 0
 
 local function resetGame()
-    ship       = { x=W/2, y=H/2, vx=0, vy=0, angle=270, thrusting=false,
+    ship       = { x=screen.w/2, y=screen.h/2, vx=0, vy=0, angle=270, thrusting=false,
                    shootTimer=0, respawnTimer=0, alive=true, lives=3 }
     bullets    = {}
     asteroids  = {}
@@ -262,7 +283,7 @@ function _update(dt: number, _totalTime: number)
                     ship.alive = false
                     state      = "gameover"
                 else
-                    ship.x, ship.y       = W/2, H/2
+                    ship.x, ship.y       = screen.w/2, screen.h/2
                     ship.vx, ship.vy     = 0, 0
                     ship.angle           = 270
                     ship.respawnTimer    = 2.5
@@ -295,14 +316,15 @@ end
 -- ─── Render ───────────────────────────────────────────────────────────────────
 
 function _render(totalTime: number)
+    local W, H = screen.w, screen.h
     draw.clear(0, 0, 0)
 
     for _, a in ipairs(asteroids) do
-        draw.poly(a.shape, a.x, a.y, a.angle, 255, 255, 255, 255)
+        drawPolyWrapped(a.shape, a.x, a.y, a.angle, 255, 255, 255, 255)
     end
 
     for _, b in ipairs(bullets) do
-        draw.circle(b.x, b.y, BULLET_RADIUS, 0, 220, 255, 255)
+        drawCircleWrapped(b.x, b.y, BULLET_RADIUS, 0, 220, 255, 255)
     end
 
     if ship.alive then
@@ -310,9 +332,9 @@ function _render(totalTime: number)
         if visible then
             local r: number, g: number, b: number
             if ship.respawnTimer > 0 then r, g, b = 160, 160, 160 else r, g, b = 255, 255, 255 end
-            draw.poly(SHIP_SHAPE, ship.x, ship.y, ship.angle, r, g, b, 255)
+            drawPolyWrapped(SHIP_SHAPE, ship.x, ship.y, ship.angle, r, g, b, 255)
             if ship.thrusting and math.floor(totalTime * 20) % 2 == 0 then
-                draw.poly(FLAME_SHAPE, ship.x, ship.y, ship.angle, 255, 160, 0, 255)
+                drawPolyWrapped(FLAME_SHAPE, ship.x, ship.y, ship.angle, 255, 160, 0, 255)
             end
         end
     end

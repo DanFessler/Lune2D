@@ -22,3 +22,6 @@ out/
 # Optional: root compile_commands.json when CMake exports or symlinks here for clangd.
 # Remove this line if your team commits that symlink for IDE support.
 /compile_commands.json
+
+# Vite (sources under web/; dist is build output)
+web/node_modules/

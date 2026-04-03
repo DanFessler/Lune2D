@@ -19,8 +19,6 @@ export type Asteroid = {
 -- ─── Constants ────────────────────────────────────────────────────────────────
 
 local PI: number = math.pi
-local W: number  = screen.w
-local H: number  = screen.h
 
 local AST_LARGE_R:  number = 42
 local AST_MEDIUM_R: number = 24
@@ -70,6 +68,7 @@ local function spawnWave(count: number): { Asteroid }
     for _ = 1, count do
         local edge = math.random(4)
         local x: number, y: number
+        local W, H = screen.w, screen.h
         if     edge == 1 then x = randf(0,W); y = -AST_LARGE_R
         elseif edge == 2 then x = randf(0,W); y = H + AST_LARGE_R
         elseif edge == 3 then x = -AST_LARGE_R; y = randf(0,H)

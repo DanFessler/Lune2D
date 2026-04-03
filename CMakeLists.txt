@@ -27,9 +27,29 @@ FetchContent_MakeAvailable(luau)
 
 # ── Executable ────────────────────────────────────────────────────────────────
 
-add_executable(asteroids src/main.cpp)
+add_executable(asteroids
+    src/main.cpp
+    src/webview_viewport.cpp
+    src/viewport_math.cpp
+)
+
+enable_testing()
+add_executable(viewport_math_tests tests/viewport_math_test.cpp src/viewport_math.cpp)
+target_include_directories(viewport_math_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME viewport_math COMMAND viewport_math_tests)
+
+if(APPLE)
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 17)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+    target_sources(asteroids PRIVATE src/webview_host_mac.mm)
+    target_link_libraries(asteroids PRIVATE "-framework WebKit" "-framework Cocoa")
+else()
+    target_sources(asteroids PRIVATE src/webview_host_stub.cpp)
+endif()
 
 target_include_directories(asteroids PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${luau_SOURCE_DIR}/VM/include
     ${luau_SOURCE_DIR}/Compiler/include)
 

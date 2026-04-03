@@ -1,0 +1,17 @@
+:root {
+  font-family: "Helvetica Neue", system-ui, sans-serif;
+  line-height: 1.4;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent !important;
+  background-color: rgba(0, 0, 0, 0) !important;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}

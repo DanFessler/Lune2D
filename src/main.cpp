@@ -9,14 +9,24 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
+
+#if defined(__APPLE__)
+#include <climits>
+#endif
+
+#include "webview_host.hpp"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 static constexpr int   SCREEN_W  = 900;
 static constexpr int   SCREEN_H  = 700;
+/// Luau / draw.clear extent (matches #game-surface when inset; else full window logical).
+static int             s_game_lu_w = SCREEN_W;
+static int             s_game_lu_h = SCREEN_H;
 static constexpr float PI        = 3.14159265f;
 static constexpr float DEG2RAD   = PI / 180.f;
 
@@ -224,6 +234,49 @@ struct Engine {
 
 static Engine g_eng;
 
+// Game region from web UI in CSS/layout coords + its reference UI space.
+static int s_ui_game_x = 0, s_ui_game_y = 0, s_ui_game_w = 0, s_ui_game_h = 0;
+static int s_ui_space_w = 0, s_ui_space_h = 0;
+
+static void on_web_game_rect(int x, int y, int w, int h, int ui_space_w, int ui_space_h, void* /*user*/) {
+    s_ui_game_x = x;
+    s_ui_game_y = y;
+    s_ui_game_w = w;
+    s_ui_game_h = h;
+    s_ui_space_w = ui_space_w;
+    s_ui_space_h = ui_space_h;
+}
+
+static void sync_lua_screen_size(lua_State* L, int w, int h) {
+    if (w < 1)
+        w = SCREEN_W;
+    if (h < 1)
+        h = SCREEN_H;
+    s_game_lu_w = w;
+    s_game_lu_h = h;
+    lua_getglobal(L, "screen");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        return;
+    }
+    lua_pushinteger(L, (lua_Integer)w);
+    lua_setfield(L, -2, "w");
+    lua_pushinteger(L, (lua_Integer)h);
+    lua_setfield(L, -2, "h");
+    lua_pop(L, 1);
+}
+
+static std::string web_ui_root_path() {
+    // Vite production bundle (npm run build in /web). For dev iteration use `vite build --watch`.
+    std::string p = std::string(SDL_GetBasePath()) + "../web/dist";
+#if defined(__APPLE__)
+    char resolved[PATH_MAX];
+    if (realpath(p.c_str(), resolved))
+        p = resolved;
+#endif
+    return p;
+}
+
 // ─── Lua helpers ──────────────────────────────────────────────────────────────
 
 static SDL_Color luaColor(lua_State* L, int r, int g, int b, int a) {
@@ -237,13 +290,14 @@ static SDL_Color luaColor(lua_State* L, int r, int g, int b, int a) {
 
 // ─── Lua bindings: draw ───────────────────────────────────────────────────────
 
-// draw.clear(r, g, b)
+// draw.clear(r, g, b) — fill logical screen rect only (SDL_RenderClear ignores viewport in SDL3).
 static int l_draw_clear(lua_State* L) {
     Uint8 r = (Uint8)luaL_optinteger(L, 1, 0);
     Uint8 g = (Uint8)luaL_optinteger(L, 2, 0);
     Uint8 b = (Uint8)luaL_optinteger(L, 3, 0);
     SDL_SetRenderDrawColor(g_eng.renderer, r, g, b, 255);
-    SDL_RenderClear(g_eng.renderer);
+    SDL_FRect bg = { 0.f, 0.f, (float)s_game_lu_w, (float)s_game_lu_h };
+    SDL_RenderFillRect(g_eng.renderer, &bg);
     return 0;
 }
 
@@ -529,6 +583,26 @@ static lua_State* createLuaState(const std::string& scriptPath) {
     return L;
 }
 
+// Optional: `--capture-window-png path.png` + `--capture-after-frames N` (composited window on macOS).
+static int         s_capture_after_frames = -1;
+static const char* s_capture_path         = nullptr;
+// Debug: compute game rect from WK layout (same % as web/index.html #game-surface) instead of JS.
+static bool        s_native_game_rect_pct = false;
+
+static void parse_cli(int argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--capture-after-frames") == 0 && i + 1 < argc) {
+            s_capture_after_frames = std::atoi(argv[++i]);
+        } else if (std::strcmp(argv[i], "--capture-window-png") == 0 && i + 1 < argc) {
+            s_capture_path = argv[++i];
+        } else if (std::strcmp(argv[i], "--native-game-rect") == 0) {
+            s_native_game_rect_pct = true;
+        }
+    }
+    if (s_capture_path && s_capture_after_frames < 0)
+        s_capture_after_frames = 180;
+}
+
 static bool luaCall(lua_State* L, const char* fn, int nargs, int nret) {
     lua_getglobal(L, fn);
     if (!lua_isfunction(L, -1)) {
@@ -547,7 +621,8 @@ static bool luaCall(lua_State* L, const char* fn, int nargs, int nret) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-int main(int /*argc*/, char* argv[]) {
+int main(int argc, char* argv[]) {
+    parse_cli(argc, argv);
     srand(static_cast<unsigned>(time(nullptr)));
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -555,7 +630,7 @@ int main(int /*argc*/, char* argv[]) {
         return 1;
     }
 
-    g_eng.window   = SDL_CreateWindow("Asteroids", SCREEN_W, SCREEN_H, 0);
+    g_eng.window   = SDL_CreateWindow("Asteroids", SCREEN_W, SCREEN_H, SDL_WINDOW_RESIZABLE);
     g_eng.renderer = SDL_CreateRenderer(g_eng.window, nullptr);
     if (!g_eng.window || !g_eng.renderer) {
         SDL_Log("Window/Renderer failed: %s", SDL_GetError());
@@ -564,6 +639,13 @@ int main(int /*argc*/, char* argv[]) {
     }
     SDL_SetRenderVSync(g_eng.renderer, 0);
     g_eng.audio.init();
+
+    webview_host_set_game_rect_callback(on_web_game_rect, nullptr);
+    {
+        std::string webRoot = web_ui_root_path();
+        if (!webview_host_init(g_eng.window, webRoot.c_str()))
+            SDL_Log("Web overlay init failed (tried %s)", webRoot.c_str());
+    }
 
     // ── Lua setup ─────────────────────────────────────────────────────────
     std::string scriptPath = SDL_GetBasePath();
@@ -582,8 +664,10 @@ int main(int /*argc*/, char* argv[]) {
     time_t scriptMtime = fileMtime(scriptPath);
     float  reloadCheck = 0;
     Uint64 prev        = SDL_GetTicks();
+    int    frame_idx   = 0;
 
     while (!g_eng.quit) {
+        frame_idx++;
         Uint64 now = SDL_GetTicks();
         float  dt  = (now - prev) / 1000.f;
         prev       = now;
@@ -594,6 +678,10 @@ int main(int /*argc*/, char* argv[]) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_EVENT_QUIT) {
                 g_eng.quit = true;
+            } else if (ev.type == SDL_EVENT_WINDOW_RESIZED) {
+                int pw = 0, ph = 0;
+                SDL_GetWindowSizeInPixels(g_eng.window, &pw, &ph);
+                webview_host_on_window_resized(pw, ph);
             } else if (ev.type == SDL_EVENT_KEY_DOWN) {
                 const char* keyName = nullptr;
                 switch (ev.key.key) {
@@ -636,16 +724,39 @@ int main(int /*argc*/, char* argv[]) {
             }
         }
 
+        webview_host_poll_dom_layout();
+
+        int lu_w = SCREEN_W, lu_h = SCREEN_H;
+        webview_apply_game_viewport(g_eng.renderer, g_eng.window,
+            SCREEN_W, SCREEN_H,
+            s_ui_game_x, s_ui_game_y, s_ui_game_w, s_ui_game_h,
+            s_ui_space_w, s_ui_space_h, s_native_game_rect_pct,
+            &lu_w, &lu_h);
+        sync_lua_screen_size(L, lu_w, lu_h);
+
         lua_pushnumber(L, dt);
         lua_pushnumber(L, totalTime);
         luaCall(L, "_update", 2, 0);
 
         lua_pushnumber(L, totalTime);
         luaCall(L, "_render", 1, 0);
+
+#if defined(__APPLE__)
+        if (s_capture_path && s_capture_after_frames > 0 && frame_idx == s_capture_after_frames) {
+            // Let WKWebView paint chrome + layout before capture.
+            SDL_Delay(800);
+            if (!webview_host_capture_composite_png(g_eng.window, s_capture_path))
+                SDL_Log("capture: failed (path=%s)", s_capture_path);
+            else
+                SDL_Log("capture: screencapture wrote %s", s_capture_path);
+            g_eng.quit = true;
+        }
+#endif
     }
 
     lua_close(L);
     g_eng.audio.shutdown();
+    webview_host_shutdown();
     SDL_DestroyRenderer(g_eng.renderer);
     SDL_DestroyWindow(g_eng.window);
     SDL_Quit();
