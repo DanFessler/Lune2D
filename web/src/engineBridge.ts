@@ -104,6 +104,94 @@ export function normalizeEngineEntityPayload(raw: unknown): EngineEntity[] {
   return out;
 }
 
+/** Match native `forEachEntitySortedByDrawOrder`: drawOrder asc, then id asc. */
+export function compareEntitySiblingOrder(
+  a: EngineEntity,
+  b: EngineEntity,
+): number {
+  if (a.drawOrder !== b.drawOrder) return a.drawOrder - b.drawOrder;
+  return Number(a.id) - Number(b.id);
+}
+
+/** Stable layout fingerprint for optimistic–native reconciliation. */
+export function hierarchyLayoutSignature(entities: EngineEntity[]): string {
+  return [...entities]
+    .sort((a, b) => Number(a.id) - Number(b.id))
+    .map(
+      (e) =>
+        `${e.id}\t${e.parentId ?? ""}\t${e.drawOrder}\t${e.updateOrder}`,
+    )
+    .join("\n");
+}
+
+/**
+ * Local mirror of hierarchy drag logic so the UI can update before the next native snapshot.
+ * Keeps @dnd-kit drop animation aligned with ctx-game (draggable node is already at the new row).
+ */
+export function applyOptimisticHierarchyDrop(
+  entities: EngineEntity[],
+  activeId: string,
+  targetId: string,
+  side: "top" | "bottom" | undefined,
+): EngineEntity[] | null {
+  const activeEntity = entities.find((e) => e.id === activeId);
+  const targetEntity = entities.find((e) => e.id === targetId);
+  if (!activeEntity || !targetEntity) return null;
+
+  const next: EngineEntity[] = entities.map((e) => ({ ...e }));
+
+  const patch = (id: string, fn: (e: EngineEntity) => void) => {
+    const row = next.find((x) => x.id === id);
+    if (row) fn(row);
+  };
+
+  if (side === "top" || side === "bottom") {
+    const parentRaw = targetEntity.parentId;
+    const parentStr = parentRaw === undefined || parentRaw === null ? null : String(parentRaw);
+    patch(activeId, (e) => {
+      e.parentId = parentStr === null ? undefined : parentStr;
+    });
+    const activeRow = next.find((e) => e.id === activeId)!;
+    const siblings = next
+      .filter(
+        (e) =>
+          (e.parentId ?? null) === (targetEntity.parentId ?? null) &&
+          e.id !== activeId,
+      )
+      .sort(compareEntitySiblingOrder);
+    const targetIdx = siblings.findIndex((e) => e.id === targetId);
+    const insertIdx = side === "top" ? targetIdx : targetIdx + 1;
+    const ordered = [
+      ...siblings.slice(0, insertIdx),
+      activeRow,
+      ...siblings.slice(insertIdx),
+    ];
+    ordered.forEach((e, i) => {
+      patch(e.id, (row) => {
+        row.drawOrder = i;
+        row.updateOrder = i;
+      });
+    });
+  } else {
+    patch(activeId, (e) => {
+      e.parentId = targetId;
+    });
+    const activeRow = next.find((e) => e.id === activeId)!;
+    const others = next
+      .filter((e) => (e.parentId ?? null) === targetId && e.id !== activeId)
+      .sort(compareEntitySiblingOrder);
+    const ordered = [...others, activeRow];
+    ordered.forEach((e, i) => {
+      patch(e.id, (row) => {
+        row.drawOrder = i;
+        row.updateOrder = i;
+      });
+    });
+  }
+
+  return next;
+}
+
 /** True if `childId` appears on the parentId chain walking up from `parentId` (cycle guard). */
 function childIsReachableAscendingFromParent(
   childId: string,
@@ -147,6 +235,15 @@ export function buildEntityHierarchy(entities: EngineEntity[]): HierarchyEntity[
       roots.push(node);
     }
   }
+
+  function sortChildren(nodes: HierarchyEntity[]) {
+    nodes.sort(compareEntitySiblingOrder);
+    for (const n of nodes) {
+      if (n.children.length > 0) sortChildren(n.children);
+    }
+  }
+  sortChildren(roots);
+
   return roots;
 }
 

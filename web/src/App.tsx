@@ -1,10 +1,15 @@
 import { Dockable } from "@danfessler/react-dockable";
 import "@danfessler/react-dockable/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NewScriptDialog } from "./editor/NewScriptDialog";
 import SceneHierarchy from "./editor/views/SceneHierarchy";
 import EngineInspector from "./editor/views/EngineInspector";
+import { inspectorTabActions, sceneHierarchyTabActions } from "./editor/tabActions";
 import { LuaEditorPanel, type LuaEditorOpenRequest } from "./LuaEditorPanel";
 import { Toolbar } from "./Toolbar";
+import type { SceneOpResult } from "./generated/sceneOps";
+import { listBehaviors } from "./luaEditorBridge";
+import { engine, unwrapSceneNumber } from "./engineProxy";
 import { useEngineEntities } from "./useEngineEntities";
 import { useGameRectBridge } from "./useGameRectBridge";
 import "./App.css";
@@ -42,13 +47,57 @@ export default function App() {
     if (!entities.some((e) => e.id === selectedId)) setSelectedId(null);
   }, [entities, selectedId]);
 
+  const [behaviorNames, setBehaviorNames] = useState<string[]>([]);
+  useEffect(() => {
+    void listBehaviors().then(setBehaviorNames);
+  }, []);
+
+  const [inspectorNewScriptOpen, setInspectorNewScriptOpen] = useState(false);
+
+  useEffect(() => {
+    if (!selectedId) setInspectorNewScriptOpen(false);
+  }, [selectedId]);
+
+  const refreshBehaviorNames = useCallback(() => {
+    void listBehaviors().then(setBehaviorNames);
+  }, []);
+
+  const onNewEntity = useCallback(async () => {
+    try {
+      const res = await engine.runtime.spawn("Entity");
+      const id = unwrapSceneNumber(res as unknown as SceneOpResult);
+      setSelectedId(String(id));
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const hierarchyMenuActions = useMemo(
+    () => sceneHierarchyTabActions({ onNewEntity }),
+    [onNewEntity],
+  );
+
+  const inspectorMenuActions = useMemo(
+    () =>
+      inspectorTabActions({
+        entity: selected,
+        behaviorNames,
+        onNewScript: () => setInspectorNewScriptOpen(true),
+      }),
+    [selected, behaviorNames],
+  );
+
   return (
     <div className="hud-shell">
       <Toolbar />
       <div className="hud-dock">
-        <Dockable.Root orientation="row" theme="darker" gap={4} radius={4}>
+        <Dockable.Root orientation="row" theme="dark" gap={4} radius={4}>
           <Dockable.Panel size={2}>
-            <Dockable.Tab id="left-hierarchy" name="Hierarchy">
+            <Dockable.Tab
+              id="left-hierarchy"
+              name="Hierarchy"
+              actions={hierarchyMenuActions}
+            >
               <SceneHierarchy
                 entities={entities}
                 selectedId={selectedId}
@@ -80,12 +129,23 @@ export default function App() {
           </Dockable.Panel>
 
           <Dockable.Panel size={2}>
-            <Dockable.Tab id="right-inspector" name="Inspector">
-              <EngineInspector entity={selected} onOpenLuaFile={focusLuaFile} />
+            <Dockable.Tab
+              id="right-inspector"
+              name="Inspector"
+              actions={inspectorMenuActions}
+            >
+              <EngineInspector entity={selected} />
             </Dockable.Tab>
           </Dockable.Panel>
         </Dockable.Root>
       </div>
+      <NewScriptDialog
+        open={inspectorNewScriptOpen && selected !== null}
+        onClose={() => setInspectorNewScriptOpen(false)}
+        entityId={selected ? Number(selected.id) : 0}
+        onOpenLuaFile={focusLuaFile}
+        onScriptsChanged={refreshBehaviorNames}
+      />
     </div>
   );
 }

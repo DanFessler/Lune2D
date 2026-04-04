@@ -25,45 +25,6 @@
   width: 100%;
 }
 
-.toolbarRow {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.newEntityBtn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--dockable-colors-border, rgba(0, 0, 0, 0.2));
-  border-radius: 3px;
-  background: var(--dockable-colors-background, #1f242b);
-  color: var(--dockable-colors-text, #c8cfd4);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.newEntityBtn:hover:not(:disabled) {
-  background: var(--dockable-colors-content, #2e3238);
-}
-
-.newEntityBtn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.spawnError {
-  margin: 4px 0 0;
-  font-size: 11px;
-  color: #f88;
-}
-
 .searchIcon {
   width: 14px;
   height: 14px;

@@ -12,6 +12,7 @@ export type HierarchyListProps = {
   canDrop?: boolean;
 };
 
+/** Multiple roots: one ctx-style subtree per entity (avoids nested <ul> per row). */
 function HierarchyList({
   entities,
   selectedId,
@@ -20,9 +21,9 @@ function HierarchyList({
   canDrop = false,
 }: HierarchyListProps) {
   return (
-    <ul className={styles.list}>
+    <div className={styles.forest}>
       {entities.map((entity) => (
-        <HierarchyListRow
+        <HierarchySubtree
           key={entity.id}
           entity={entity}
           selectedId={selectedId}
@@ -31,11 +32,12 @@ function HierarchyList({
           canDrop={canDrop}
         />
       ))}
-    </ul>
+    </div>
   );
 }
 
-function HierarchyListRow({
+/** Mirrors ctx-game `HierarchyList` for a single node: one `<ul>` row + bottom divider. */
+function HierarchySubtree({
   entity,
   selectedId,
   onSelect,
@@ -63,7 +65,7 @@ function HierarchyListRow({
         </ul>
       ),
       type: "game-object",
-      entityId: entity.id,
+      objectId: entity.id,
     },
   });
 
@@ -112,7 +114,7 @@ function HierarchyItem({
     id: entity.id,
     data: {
       type: "reparent-object",
-      entityId: entity.id,
+      objectId: entity.id,
     },
   });
 
@@ -167,7 +169,7 @@ function HierarchyItem({
       {isOpen && hasChildren ? (
         <div className={styles.children}>
           {entity.children.map((child) => (
-            <HierarchyListRow
+            <HierarchySubtree
               key={child.id}
               entity={child}
               selectedId={selectedId}
@@ -184,9 +186,9 @@ function HierarchyItem({
 
 function DroppableDivider({ side, id }: { side: "top" | "bottom"; id: string }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: id + "-" + side,
+    id: `${id}-${side}`,
     data: {
-      entityId: id,
+      objectId: id,
       side,
     },
   });

@@ -1,0 +1,86 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 360px;
+  background: var(--dockable-colors-headers, #2a2e33);
+  border: 1px solid var(--dockable-colors-borders, #3a3f44);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  padding: 12px 14px 14px;
+  box-sizing: border-box;
+}
+
+.title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dockable-colors-text, #c4c8cc);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.label {
+  font-size: 10px;
+  opacity: 0.85;
+  color: var(--dockable-colors-text, #c4c8cc);
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--dockable-colors-borders, #3a3f44);
+  border-radius: 3px;
+  background: var(--dockable-colors-background, #1e2125);
+  color: var(--dockable-colors-text, #c4c8cc);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 5px 12px;
+  font-size: 11px;
+  border-radius: 3px;
+  border: 1px solid var(--dockable-colors-borders, #3a3f44);
+  background: var(--dockable-colors-background, #1e2125);
+  color: var(--dockable-colors-text, #c4c8cc);
+  cursor: pointer;
+}
+
+.btnPrimary {
+  border-color: var(--dockable-colors-selected, #4488cc);
+  background: rgba(68, 136, 204, 0.2);
+  color: var(--dockable-colors-selected, #88bbee);
+}
+
+.btn:hover {
+  opacity: 0.95;
+  filter: brightness(1.08);
+}
+
+.formError {
+  margin: 0;
+  font-size: 10px;
+  color: #ff8888;
+}

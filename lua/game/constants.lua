@@ -13,7 +13,7 @@ local M = {
 	BULLET_SPD = 520,
 	BULLET_LIFE = 1.1,
 	BULLET_RADIUS = 3,
-	SHOOT_COOLDOWN = 0.18,
+	SHOOT_COOLDOWN = 0.01,
 	-- After losing a life: hidden wait, then blink-invuln at center (seconds).
 	SHIP_DEATH_RESPAWN_DELAY = 1.5,
 	SHIP_POST_RESPAWN_INVULN = 2.5,

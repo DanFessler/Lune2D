@@ -1,11 +1,18 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { FaPlus, FaSearch } from "react-icons/fa";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
+import { FaSearch } from "react-icons/fa";
 import type { EngineEntity, HierarchyEntity } from "../../engineBridge";
-import { buildEntityHierarchy } from "../../engineBridge";
-import { engine, unwrapSceneNumber } from "../../engineProxy";
+import {
+  applyOptimisticHierarchyDrop,
+  buildEntityHierarchy,
+  compareEntitySiblingOrder,
+  hierarchyLayoutSignature,
+} from "../../engineBridge";
+import { engine } from "../../engineProxy";
 import HierarchyList from "../components/HierarchyList";
 import styles from "./Hierarchy.module.css";
 import {
+  closestCenter,
   DndContext,
   DragOverlay,
   PointerSensor,
@@ -51,12 +58,22 @@ export default function SceneHierarchy({
 }: SceneHierarchyProps) {
   const [search, setSearch] = useState("");
   const [activeChildren, setActiveChildren] = useState<ReactNode | null>(null);
-  const [spawnBusy, setSpawnBusy] = useState(false);
-  const [spawnError, setSpawnError] = useState<string | null>(null);
+  const [optimisticEntities, setOptimisticEntities] = useState<
+    EngineEntity[] | null
+  >(null);
+
+  const modelEntities = optimisticEntities ?? entities;
+
+  useEffect(() => {
+    if (!optimisticEntities) return;
+    if (hierarchyLayoutSignature(entities) === hierarchyLayoutSignature(optimisticEntities)) {
+      setOptimisticEntities(null);
+    }
+  }, [entities, optimisticEntities]);
 
   const tree = useMemo(
-    () => buildEntityHierarchy(entities),
-    [entities],
+    () => buildEntityHierarchy(modelEntities),
+    [modelEntities],
   );
 
   const filteredTree = useMemo(
@@ -75,13 +92,26 @@ export default function SceneHierarchy({
     const current = event.over?.data.current;
     if (!current || !active) return;
 
-    const { entityId: activeId } = active;
-    const { entityId: targetId, side } = current;
+    const { objectId: activeId } = active;
+    const { objectId: targetId, side } = current;
 
     if (!activeId || !targetId || activeId === targetId) return;
 
-    const activeEntity = entities.find((e) => e.id === activeId);
-    const targetEntity = entities.find((e) => e.id === targetId);
+    const base = optimisticEntities ?? entities;
+    const optimistic = applyOptimisticHierarchyDrop(
+      base,
+      activeId,
+      targetId,
+      side === "top" || side === "bottom" ? side : undefined,
+    );
+    if (optimistic) {
+      flushSync(() => {
+        setOptimisticEntities(optimistic);
+      });
+    }
+
+    const activeEntity = base.find((e) => e.id === activeId);
+    const targetEntity = base.find((e) => e.id === targetId);
     if (!activeEntity || !targetEntity) return;
 
     if (side === "top" || side === "bottom") {
@@ -93,45 +123,38 @@ export default function SceneHierarchy({
       } else {
         engine.runtime.removeParent(Number(activeId));
       }
-      const siblings = entities
+      const siblings = base
         .filter(
           (e) =>
             (e.parentId ?? null) === (targetEntity.parentId ?? null) &&
             e.id !== activeId,
         )
-        .sort((a, b) => a.drawOrder - b.drawOrder);
+        .sort(compareEntitySiblingOrder);
       const targetIdx = siblings.findIndex((e) => e.id === targetId);
       const insertIdx = side === "top" ? targetIdx : targetIdx + 1;
       siblings.splice(insertIdx, 0, activeEntity);
       siblings.forEach((e, i) => {
-        if (e.drawOrder !== i) {
-          engine.runtime.setDrawOrder(Number(e.id), i);
-        }
+        engine.runtime.setDrawOrder(Number(e.id), i);
+        engine.runtime.setUpdateOrder(Number(e.id), i);
       });
     } else {
+      const parentKey = String(targetId);
       engine.runtime.setParent(Number(activeId), Number(targetId));
+      const existingUnderTarget = base
+        .filter((e) => (e.parentId ?? null) === parentKey && e.id !== activeId)
+        .sort(compareEntitySiblingOrder);
+      const underTarget = [...existingUnderTarget, activeEntity];
+      underTarget.forEach((e, i) => {
+        engine.runtime.setDrawOrder(Number(e.id), i);
+        engine.runtime.setUpdateOrder(Number(e.id), i);
+      });
     }
-
-    setActiveChildren(null);
   }
-
-  const handleNewEntity = useCallback(async () => {
-    setSpawnError(null);
-    setSpawnBusy(true);
-    try {
-      const res = await engine.runtime.spawn("Entity");
-      const id = unwrapSceneNumber(res);
-      onSelect(String(id));
-    } catch (e) {
-      setSpawnError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSpawnBusy(false);
-    }
-  }, [onSelect]);
 
   return (
     <DndContext
       sensors={sensors}
+      collisionDetection={closestCenter}
       onDragStart={({ active }) => {
         setActiveChildren(active.data?.current?.children);
       }}
@@ -140,34 +163,17 @@ export default function SceneHierarchy({
     >
       <div className={styles.container}>
         <div className={styles.header}>
-          <div className={styles.toolbarRow}>
-            <div className={styles.searchContainer}>
-              <FaSearch className={styles.searchIcon} />
-              <input
-                type="text"
-                placeholder="Search…"
-                className={styles.searchInput}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                aria-label="Search hierarchy"
-              />
-            </div>
-            <button
-              type="button"
-              className={styles.newEntityBtn}
-              title="New entity"
-              aria-label="New entity"
-              disabled={spawnBusy}
-              onClick={() => void handleNewEntity()}
-            >
-              <FaPlus aria-hidden />
-            </button>
+          <div className={styles.searchContainer}>
+            <FaSearch className={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder="Search…"
+              className={styles.searchInput}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search hierarchy"
+            />
           </div>
-          {spawnError ? (
-            <p className={styles.spawnError} role="alert">
-              {spawnError}
-            </p>
-          ) : null}
         </div>
         <div className={styles.content}>
           <HierarchyList
@@ -179,9 +185,7 @@ export default function SceneHierarchy({
         </div>
       </div>
       <DragOverlay>
-        {activeChildren ? (
-          <div>{activeChildren}</div>
-        ) : null}
+        {activeChildren}
       </DragOverlay>
     </DndContext>
   );
