@@ -45,9 +45,36 @@ type Bullet = {
     name: string,
     draw: (Bullet, number) -> (),
     x: number, y: number,
+    angle: number,
     vx: number, vy: number,
     life: number,
     dead: boolean?,
+}
+
+--- Short-lived VFX: tiny asteroid shards (polygon) when a rock splits.
+type AstDebris = {
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    angle: number,
+    rotSpeed: number,
+    life: number,
+    maxLife: number,
+    shape: Polygon,
+}
+
+--- One hull line segment torn from the ship; spins and flies outward.
+type ShipDebris = {
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    angle: number,
+    rotSpeed: number,
+    halfLen: number,
+    life: number,
+    maxLife: number,
 }
 
 -- ─── Constants ────────────────────────────────────────────────────────────────
@@ -66,6 +93,8 @@ local SHOOT_COOLDOWN: number = 0.18
 local AST_SCORE: { [AsteroidSize]: number }        = { large = 20,          medium = 50,           small = 100 }
 local AST_SOUND: { [AsteroidSize]: string }        = { large = "exp_large", medium = "exp_medium", small = "exp_small" }
 local AST_SPLIT: { [AsteroidSize]: AsteroidSize? } = { large = "medium",    medium = "small",      small = nil }
+
+local AST_SPLIT_DEBRIS_COUNT: { [AsteroidSize]: number } = { large = 16, medium = 12, small = 0 }
 
 -- ─── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -107,6 +136,152 @@ local function drawCircleWrapped(cx: number, cy: number, radius: number,
         for oy = -H, H, H do
             draw.circle(cx + ox, cy + oy, radius, r, g, b, a)
         end
+    end
+end
+
+local function drawLineWrapped(x1: number, y1: number, x2: number, y2: number,
+    cr: number, cg: number, cb: number, ca: number)
+    local W, H = screen.w, screen.h
+    for ox = -W, W, W do
+        for oy = -H, H, H do
+            draw.line(x1 + ox, y1 + oy, x2 + ox, y2 + oy, cr, cg, cb, ca)
+        end
+    end
+end
+
+local function makeTinyShard(radius: number): Polygon
+    local verts = 4 + math.random(0, 2)
+    local shape: Polygon = {}
+    for i = 1, verts do
+        local ang = ((i - 1) / verts) * 2 * PI
+        local ri = radius * randf(0.45, 1.0)
+        shape[i] = { math.cos(ang) * ri, math.sin(ang) * ri }
+    end
+    return shape
+end
+
+local astDebris: { AstDebris } = {}
+local shipDebris: { ShipDebris } = {}
+
+local function spawnAsteroidSplitParticles(x: number, y: number, fromSize: AsteroidSize)
+    local n = AST_SPLIT_DEBRIS_COUNT[fromSize]
+    if n <= 0 then
+        return
+    end
+    for _ = 1, n do
+        local spd = randf(55, 170)
+        local ang = randf(0, 2 * PI)
+        local Rad = randf(1.8, 3.8)
+        local life = randf(0.38, 0.72)
+        astDebris[#astDebris + 1] = {
+            x = x + randf(-2, 2),
+            y = y + randf(-2, 2),
+            vx = math.cos(ang) * spd,
+            vy = math.sin(ang) * spd,
+            angle = randf(0, 360),
+            rotSpeed = randf(-420, 420),
+            life = life,
+            maxLife = life,
+            shape = makeTinyShard(Rad),
+        }
+    end
+end
+
+local function spawnShipBreakup(sx: number, sy: number, shipAng: number, svx: number, svy: number)
+    local rad = shipAng * PI / 180
+    local ca, sa = math.cos(rad), math.sin(rad)
+    local verts = SHIP_SHAPE
+    for e = 1, 3 do
+        local p1, p2 = verts[e], verts[e % 3 + 1]
+        local mx = (p1[1] + p2[1]) * 0.5
+        local my = (p1[2] + p2[2]) * 0.5
+        local edx, edy = p2[1] - p1[1], p2[2] - p1[2]
+        local elen = math.sqrt(edx * edx + edy * edy)
+        if elen >= 1e-4 then
+            local halfLen = elen * 0.5
+            local wx = mx * ca - my * sa + sx
+            local wy = mx * sa + my * ca + sy
+            local wdx = edx * ca - edy * sa
+            local wdy = edx * sa + edy * ca
+            local segAng = math.atan2(wdy, wdx) * 180 / PI
+            local blast = randf(90, 220)
+            local bang = randf(0, 2 * PI)
+            local life = randf(0.75, 1.25)
+            shipDebris[#shipDebris + 1] = {
+                x = wx,
+                y = wy,
+                vx = svx + math.cos(bang) * blast,
+                vy = svy + math.sin(bang) * blast,
+                angle = segAng,
+                rotSpeed = randf(-540, 540),
+                halfLen = halfLen,
+                life = life,
+                maxLife = life,
+            }
+        end
+    end
+end
+
+local function updateParticles(dt: number)
+    if dt <= 0 then
+        return
+    end
+    local liveA: { AstDebris } = {}
+    for _, p in ipairs(astDebris) do
+        p.life -= dt
+        if p.life > 0 then
+            p.angle += p.rotSpeed * dt
+            p.x, p.y = wrap(p.x + p.vx * dt, p.y + p.vy * dt)
+            liveA[#liveA + 1] = p
+        end
+    end
+    astDebris = liveA
+
+    local liveS: { ShipDebris } = {}
+    for _, p in ipairs(shipDebris) do
+        p.life -= dt
+        if p.life > 0 then
+            p.angle += p.rotSpeed * dt
+            p.x, p.y = wrap(p.x + p.vx * dt, p.y + p.vy * dt)
+            liveS[#liveS + 1] = p
+        end
+    end
+    shipDebris = liveS
+end
+
+local function drawParticles(_totalTime: number)
+    for _, p in ipairs(astDebris) do
+        local t = p.maxLife > 0 and (p.life / p.maxLife) or 0
+        if t < 0 then
+            t = 0
+        elseif t > 1 then
+            t = 1
+        end
+        local r = math.floor(220 * t + 0.5)
+        local g = math.floor(220 * t + 0.5)
+        local b = math.floor(230 * t + 0.5)
+        local a = 255
+        drawPolyWrapped(p.shape, p.x, p.y, p.angle, r, g, b, a)
+    end
+    for _, p in ipairs(shipDebris) do
+        local t = p.maxLife > 0 and (p.life / p.maxLife) or 0
+        if t < 0 then
+            t = 0
+        elseif t > 1 then
+            t = 1
+        end
+        local br = math.floor(255 * t + 0.5)
+        local bg = math.floor(255 * t + 0.5)
+        local bb = math.floor(255 * t + 0.5)
+        local ba = 255
+        local lr = p.angle * PI / 180
+        local c, s = math.cos(lr), math.sin(lr)
+        local hx = p.halfLen
+        local x1 = p.x - c * hx
+        local y1 = p.y - s * hx
+        local x2 = p.x + c * hx
+        local y2 = p.y + s * hx
+        drawLineWrapped(x1, y1, x2, y2, br, bg, bb, ba)
     end
 end
 
@@ -219,6 +394,8 @@ local function resetGame()
     fps = 0
     fpsFrames = 0
     fpsAccum = 0
+    astDebris = {}
+    shipDebris = {}
 end
 
 -- ─── Init ─────────────────────────────────────────────────────────────────────
@@ -243,6 +420,8 @@ function _update(dt: number, _totalTime: number)
         world.rebuild(ship, asteroids, bullets)
         return
     end
+
+    updateParticles(dt)
 
     if state ~= "gameover" then
         if state == "newwave" then
@@ -297,6 +476,7 @@ function _update(dt: number, _totalTime: number)
                 draw = bullet_draw,
                 x = tx,
                 y = ty,
+                angle = 0,
                 vx = ship.vx + math.cos(rad) * BULLET_SPD,
                 vy = ship.vy + math.sin(rad) * BULLET_SPD,
                 life = BULLET_LIFE,
@@ -338,6 +518,7 @@ function _update(dt: number, _totalTime: number)
                         audio.play(AST_SOUND[a.size])
                         local nextSize: AsteroidSize? = AST_SPLIT[a.size]
                         if nextSize then
+                            spawnAsteroidSplitParticles(a.x, a.y, a.size)
                             for _ = 1, 2 do
                                 local spd = randf(40*1.3, 110*1.3)
                                 local ang = randf(0, 2*PI)
@@ -374,6 +555,7 @@ function _update(dt: number, _totalTime: number)
             local r = a.r + SHIP_RADIUS
             if dist2(ship.x, ship.y, a.x, a.y) < r*r then
                 audio.play("death")
+                spawnShipBreakup(ship.x, ship.y, ship.angle, ship.vx, ship.vy)
                 ship.lives -= 1
                 if ship.lives <= 0 then
                     ship.alive = false
@@ -420,6 +602,8 @@ function _render(totalTime: number)
     draw.clear(0, 0, 0)
 
     world.draw_all(totalTime)
+
+    drawParticles(totalTime)
 
     draw.number(score, 16, 16, 2.5, 255, 255, 255, 255)
 
