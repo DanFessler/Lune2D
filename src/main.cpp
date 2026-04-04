@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
@@ -234,8 +235,24 @@ struct Engine {
     bool          quit     = false;
 };
 
-static Engine        g_eng;
+static Engine         g_eng;
 static EntityRegistry g_entities;
+
+static std::atomic<bool> s_script_reload_requested{false};
+static std::atomic<bool> s_script_paused{false};
+static std::atomic<bool> s_start_sim_requested{false};
+
+static void on_script_reload_request() {
+    s_script_reload_requested.store(true, std::memory_order_relaxed);
+}
+
+static void on_script_set_paused(bool paused) {
+    s_script_paused.store(paused, std::memory_order_relaxed);
+}
+
+static void on_script_start_sim_request() {
+    s_start_sim_requested.store(true, std::memory_order_relaxed);
+}
 
 // Game region from web UI in CSS/layout coords + its reference UI space.
 static int s_ui_game_x = 0, s_ui_game_y = 0, s_ui_game_w = 0, s_ui_game_h = 0;
@@ -670,6 +687,12 @@ int main(int argc, char* argv[]) {
 
     webview_host_set_game_rect_callback(on_web_game_rect, nullptr);
     {
+        std::string luaDir = std::string(SDL_GetBasePath()) + "../lua";
+        webview_host_set_lua_workspace(luaDir.c_str());
+    }
+    webview_host_set_script_controls(
+        on_script_reload_request, on_script_set_paused, on_script_start_sim_request);
+    {
         std::string webRoot = web_ui_root_path();
         if (!webview_host_init(g_eng.window, webRoot.c_str()))
             SDL_Log("Web overlay init failed (tried %s)", webRoot.c_str());
@@ -746,10 +769,28 @@ int main(int argc, char* argv[]) {
                     lua_close(L);
                     L = newL;
                     luaCall(L, "_init", 0, 0);
+                    s_script_paused.store(false, std::memory_order_relaxed);
                     SDL_Log("game.lua reloaded");
                 }
                 // on failure: keep running with the old state
             }
+        }
+
+        if (s_script_reload_requested.exchange(false, std::memory_order_acq_rel)) {
+            lua_State* newL = createLuaState(scriptPath);
+            if (newL) {
+                lua_close(L);
+                L                = newL;
+                scriptMtime      = fileMtime(scriptPath);
+                luaCall(L, "_init", 0, 0);
+                s_script_paused.store(false, std::memory_order_relaxed);
+                SDL_Log("game.lua restarted (editor)");
+            }
+        }
+
+        if (s_start_sim_requested.exchange(false, std::memory_order_acq_rel)) {
+            s_script_paused.store(false, std::memory_order_relaxed);
+            luaCall(L, "_on_hud_play", 0, 0);
         }
 
         webview_host_poll_dom_layout();
@@ -763,9 +804,11 @@ int main(int argc, char* argv[]) {
         sync_lua_screen_size(L, lu_w, lu_h);
 
         g_entities.clear();
-        lua_pushnumber(L, dt);
-        lua_pushnumber(L, totalTime);
-        luaCall(L, "_update", 2, 0);
+        if (!s_script_paused.load(std::memory_order_relaxed)) {
+            lua_pushnumber(L, dt);
+            lua_pushnumber(L, totalTime);
+            luaCall(L, "_update", 2, 0);
+        }
         editor_bridge_publish_entity_snapshot(g_entities);
 
         lua_pushnumber(L, totalTime);

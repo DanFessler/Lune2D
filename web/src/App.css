@@ -57,3 +57,16 @@
 .hud-dock div:has(.game-dock-body)::after {
   display: none !important;
 }
+
+/* Lua column: tab body must stretch so Monaco can use flex height */
+.hud-dock div:has(.lua-editor-panel) {
+  min-height: 0;
+  flex: 1;
+}
+
+.hud-dock div:has(> .lua-editor-panel) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}

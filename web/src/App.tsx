@@ -3,6 +3,7 @@ import "@danfessler/react-dockable/style.css";
 import { useEffect, useMemo, useState } from "react";
 import { EntityListPanel } from "./EntityListPanel";
 import { InspectorPanel } from "./InspectorPanel";
+import { LuaEditorPanel } from "./LuaEditorPanel";
 import { useEngineEntities } from "./useEngineEntities";
 import { useGameRectBridge } from "./useGameRectBridge";
 import "./App.css";
@@ -46,6 +47,11 @@ export default function App() {
                   aria-hidden="true"
                 />
               </div>
+            </Dockable.Tab>
+          </Dockable.Panel>
+          <Dockable.Panel size={1}>
+            <Dockable.Tab id="lua-editor" name="Lua">
+              <LuaEditorPanel />
             </Dockable.Tab>
           </Dockable.Panel>
           <Dockable.Panel size={1}>

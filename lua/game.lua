@@ -24,7 +24,7 @@ type Asteroid = {
     dead: boolean?,
 }
 
-type GameState = "playing" | "gameover" | "newwave"
+type GameState = "title" | "playing" | "gameover" | "newwave"
 
 type Ship = {
     id: string,
@@ -212,7 +212,7 @@ local function resetGame()
     asteroids = {}
     score = 0
     wave = 0
-    state = "newwave"
+    state = "title"
     waveDelay = 1.5
     beatTimer = 0
     beatIndex = 0
@@ -237,6 +237,11 @@ function _update(dt: number, _totalTime: number)
         fps       = math.floor(fpsFrames / fpsAccum + 0.5)
         fpsFrames = 0
         fpsAccum  = 0
+    end
+
+    if state == "title" then
+        world.rebuild(ship, asteroids, bullets)
+        return
     end
 
     if state ~= "gameover" then
@@ -422,6 +427,21 @@ function _render(totalTime: number)
         draw.poly(MINI_SHIP, W - 30 - (i-1)*28, 20, 270, 255, 255, 255, 255)
     end
 
+    if state == "title" then
+        local msg   = "READY"
+        local scale = 4
+        local cw    = 8 * scale
+        local sx    = (W - #msg * cw) / 2
+        for i = 1, #msg do
+            draw.char(msg:sub(i,i), sx + (i-1)*cw, H/2 - 50, scale, 200, 220, 255, 255)
+        end
+        local pr  = "START IN LUA PANEL OR SPACE"
+        local prx = (W - #pr * 8 * 1.25) / 2
+        for i = 1, #pr do
+            draw.char(pr:sub(i,i), prx + (i-1)*8*1.25, H/2 + 10, 1.25, 180, 180, 200, 255)
+        end
+    end
+
     if state == "gameover" then
         local msg   = "GAME OVER"
         local scale = 4
@@ -459,8 +479,20 @@ end
 
 -- ─── Key events ───────────────────────────────────────────────────────────────
 
+function _on_hud_play()
+    if state == "gameover" then
+        resetGame()
+    end
+    if state == "title" then
+        state     = "newwave"
+        waveDelay = 1.5
+    end
+end
+
 function _on_keydown(key: string)
-    if key == "r" and state == "gameover" then
+    if key == "space" and state == "title" then
+        _on_hud_play()
+    elseif key == "r" and state == "gameover" then
         resetGame()
     elseif key == "escape" then
         app.quit()

@@ -1,0 +1,87 @@
+.lua-editor-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: #1e1e1e;
+  color: #ddd;
+}
+
+.lua-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  background-color: var(--dockable-colors-headers);
+}
+
+.lua-editor-toolbar button {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background: #2d2d2d;
+  color: #eee;
+  cursor: pointer;
+}
+
+.lua-editor-toolbar button:hover {
+  background: #3c3c3c;
+}
+
+.lua-editor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.lua-editor-label select {
+  min-width: 8rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background: #2d2d2d;
+  color: #eee;
+}
+
+.lua-editor-error {
+  margin: 6px 8px;
+  color: #f88;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.lua-editor-status {
+  margin: 4px 8px;
+  font-size: 12px;
+  color: #8c8;
+  flex-shrink: 0;
+}
+
+/* Flex column + absolute inner: percentage heights inside Monaco are unreliable in nested flex/WKWebView */
+.lua-editor-monaco {
+  flex: 1 1 0;
+  min-height: 12rem;
+  min-width: 0;
+  width: 100%;
+  position: relative;
+}
+
+/* @monaco-editor/react mounts a single root div with inline width/height */
+.lua-editor-monaco > div {
+  position: absolute !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+}
+
+/* Ensure the actual editor surface fills the sized wrapper (WKWebView + flex edge cases) */
+.lua-editor-monaco .monaco-editor {
+  height: 100% !important;
+}

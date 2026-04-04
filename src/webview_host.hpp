@@ -48,3 +48,11 @@ bool webview_host_capture_composite_png(SDL_Window* window, const char* path_utf
 // Push entity snapshot JSON (UTF-8) to the web UI: window.__engineOnEntities(payload).
 // Safe when the webview is absent: stub is a no-op.
 void webview_host_publish_entities_json(const char* json_utf8);
+
+// Absolute path to the directory containing *.lua scripts (e.g. ".../lua").
+void webview_host_set_lua_workspace(const char* lua_dir_abs_utf8);
+
+// Host callbacks for the JS "engineScript" bridge (Lua editor tooling). Stubs are no-ops.
+void webview_host_set_script_controls(void (*on_reload_request)(void),
+                                      void (*on_set_paused)(bool paused),
+                                      void (*on_start_sim_request)(void));

@@ -24,3 +24,9 @@ bool webview_host_capture_composite_png(SDL_Window* /*window*/, const char* /*pa
 }
 
 void webview_host_publish_entities_json(const char* /*json_utf8*/) {}
+
+void webview_host_set_lua_workspace(const char* /*lua_dir_abs_utf8*/) {}
+
+void webview_host_set_script_controls(void (* /*on_reload_request*/)(void),
+                                      void (* /*on_set_paused*/)(bool),
+                                      void (* /*on_start_sim_request*/)(void)) {}

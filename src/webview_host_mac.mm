@@ -4,6 +4,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #include <stdlib.h>
+#include <string>
 
 #include <SDL3/SDL.h>
 
@@ -56,12 +57,179 @@ static void webview_install_sdl_cursor_coexistence_swizzle(NSView* sdlContentVie
     });
 }
 
-static WKWebView* s_webView = nil;
-static NSWindow* s_nsWindow = nil;
-static WebViewGameRectFn s_rectCb = nullptr;
-static void* s_rectUser = nullptr;
+static WKWebView*        s_webView = nil;
+static NSWindow*         s_nsWindow = nil;
+static WebViewGameRectFn s_rectCb   = nullptr;
+static void*             s_rectUser = nullptr;
+
+static std::string              s_lua_workspace;
+static void (*s_on_script_reload)(void)                = nullptr;
+static void (*s_on_script_set_paused)(bool paused)    = nullptr;
+static void (*s_on_script_start_sim)(void)             = nullptr;
 
 @interface GameRectBridge : NSObject <WKScriptMessageHandler>
+@end
+
+@interface EngineScriptBridge : NSObject <WKScriptMessageHandler>
+@end
+
+static EngineScriptBridge* s_engineScriptBridge = nil;
+
+void webview_host_set_lua_workspace(const char* lua_dir_abs_utf8) {
+    s_lua_workspace = lua_dir_abs_utf8 ? lua_dir_abs_utf8 : "";
+}
+
+void webview_host_set_script_controls(void (*on_reload_request)(void),
+                                      void (*on_set_paused)(bool paused),
+                                      void (*on_start_sim_request)(void)) {
+    s_on_script_reload      = on_reload_request;
+    s_on_script_set_paused  = on_set_paused;
+    s_on_script_start_sim   = on_start_sim_request;
+}
+
+static BOOL script_rel_path_ok(NSString* name) {
+    if (![name isKindOfClass:[NSString class]] || !name.length)
+        return NO;
+    if ([name containsString:@".."])
+        return NO;
+    if ([name rangeOfString:@"/"].location != NSNotFound)
+        return NO;
+    if ([name rangeOfString:@"\\"].location != NSNotFound)
+        return NO;
+    return [name hasSuffix:@".lua"];
+}
+
+static void script_bridge_send(NSDictionary* payload) {
+    if (!s_webView || !payload)
+        return;
+    NSError* err = nil;
+    NSData*  data = [NSJSONSerialization dataWithJSONObject:payload options:0 error:&err];
+    if (!data) {
+        NSLog(@"engineScript: JSON error %@", err);
+        return;
+    }
+    NSString* json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    NSString* js = [NSString
+        stringWithFormat:@"window.__engineScriptBridge&&window.__engineScriptBridge.receive(%@);", json];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [s_webView evaluateJavaScript:js
+                    completionHandler:^(__unused id _Nullable result, NSError* _Nullable error) {
+                        if (error)
+                            NSLog(@"engineScript reply: %@", error);
+                    }];
+    });
+}
+
+@implementation EngineScriptBridge
+- (void)userContentController:(WKUserContentController*)userContentController
+      didReceiveScriptMessage:(WKScriptMessage*)message {
+    (void)userContentController;
+    if (![message.body isKindOfClass:[NSDictionary class]]) {
+        NSLog(@"engineScript: expected NSDictionary");
+        return;
+    }
+    NSDictionary* d   = (NSDictionary*)message.body;
+    NSString*     rid = d[@"requestId"];
+    NSString*     op  = d[@"op"];
+    if (![rid isKindOfClass:[NSString class]] || !rid.length || ![op isKindOfClass:[NSString class]])
+        return;
+
+    if ([op isEqualToString:@"listLua"]) {
+        if (s_lua_workspace.empty()) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua workspace not configured"});
+            return;
+        }
+        NSString* dir = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
+        if (!dir.length) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua workspace path invalid"});
+            return;
+        }
+        NSError*             err  = nil;
+        NSFileManager*       fm   = [NSFileManager defaultManager];
+        NSArray<NSString*>*  names = [fm contentsOfDirectoryAtPath:dir error:&err];
+        if (!names) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : err.localizedDescription ?: @"list failed"
+            });
+            return;
+        }
+        NSMutableArray* files = [NSMutableArray array];
+        for (NSString* name in names) {
+            if (![name hasSuffix:@".lua"])
+                continue;
+            if (!script_rel_path_ok(name))
+                continue;
+            NSString* fullPath = [dir stringByAppendingPathComponent:name];
+            NSString* text =
+                [NSString stringWithContentsOfFile:fullPath
+                                            encoding:NSUTF8StringEncoding
+                                               error:&err];
+            if (!text) {
+                script_bridge_send(@{
+                    @"requestId" : rid,
+                    @"ok" : @NO,
+                    @"error" : err.localizedDescription ?: @"read failed"
+                });
+                return;
+            }
+            [files addObject:@{@"path" : name, @"content" : text}];
+        }
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"files" : files});
+        return;
+    }
+
+    if ([op isEqualToString:@"writeLua"]) {
+        NSString* path    = d[@"path"];
+        NSString* content = d[@"content"];
+        if (![content isKindOfClass:[NSString class]])
+            content = @"";
+        if (!script_rel_path_ok(path)) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Invalid path"});
+            return;
+        }
+        if (s_lua_workspace.empty()) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua workspace not configured"});
+            return;
+        }
+        NSString* dir      = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
+        NSString* fullPath = [dir stringByAppendingPathComponent:path];
+        NSError*  werr     = nil;
+        if (![content writeToFile:fullPath atomically:YES encoding:NSUTF8StringEncoding error:&werr]) {
+            script_bridge_send(
+                @{@"requestId" : rid, @"ok" : @NO, @"error" : werr.localizedDescription ?: @"write failed"});
+            return;
+        }
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
+        return;
+    }
+
+    if ([op isEqualToString:@"restartGame"]) {
+        if (s_on_script_reload)
+            s_on_script_reload();
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
+        return;
+    }
+
+    if ([op isEqualToString:@"setPaused"]) {
+        NSNumber* pausedNum = d[@"paused"];
+        bool      paused    = pausedNum ? pausedNum.boolValue : false;
+        if (s_on_script_set_paused)
+            s_on_script_set_paused(paused);
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
+        return;
+    }
+
+    if ([op isEqualToString:@"startSimulation"]) {
+        if (s_on_script_start_sim)
+            s_on_script_start_sim();
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
+        return;
+    }
+
+    script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Unknown op"});
+}
 @end
 
 // WKWebView still paints its internal NSScrollView white unless these are cleared.
@@ -241,6 +409,8 @@ bool webview_host_init(SDL_Window* window, const char* web_root_utf8) {
         WKUserContentController* uc = cfg.userContentController;
         GameRectBridge* bridge = [GameRectBridge new];
         [uc addScriptMessageHandler:bridge name:@"gameRect"];
+        s_engineScriptBridge = [EngineScriptBridge new];
+        [uc addScriptMessageHandler:s_engineScriptBridge name:@"engineScript"];
 
         WKWebView* wv =
             [[WKWebView alloc] initWithFrame:contentView.bounds configuration:cfg];
@@ -358,9 +528,12 @@ void webview_host_shutdown() {
         s_webView = nil;
         if (wv) {
             wv.navigationDelegate = nil;
-            [wv.configuration.userContentController removeScriptMessageHandlerForName:@"gameRect"];
+            WKUserContentController* uc = wv.configuration.userContentController;
+            [uc removeScriptMessageHandlerForName:@"gameRect"];
+            [uc removeScriptMessageHandlerForName:@"engineScript"];
             [wv removeFromSuperview];
         }
+        s_engineScriptBridge = nil;
         s_nav = nil;
         s_nsWindow = nil;
     }
