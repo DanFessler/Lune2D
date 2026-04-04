@@ -18,6 +18,8 @@
 #include <climits>
 #endif
 
+#include "editor_bridge.hpp"
+#include "entity_registry.hpp"
 #include "webview_host.hpp"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -232,7 +234,8 @@ struct Engine {
     bool          quit     = false;
 };
 
-static Engine g_eng;
+static Engine        g_eng;
+static EntityRegistry g_entities;
 
 // Game region from web UI in CSS/layout coords + its reference UI space.
 static int s_ui_game_x = 0, s_ui_game_y = 0, s_ui_game_w = 0, s_ui_game_h = 0;
@@ -267,7 +270,11 @@ static void sync_lua_screen_size(lua_State* L, int w, int h) {
 }
 
 static std::string web_ui_root_path() {
-    // Vite production bundle (npm run build in /web). For dev iteration use `vite build --watch`.
+    // Vite production bundle (npm run build in /web). For HMR dev, set WEBVIEW_DEV_URL and run
+    // `npm run dev` in /web (e.g. WEBVIEW_DEV_URL=http://127.0.0.1:5173/).
+    if (const char* dev = getenv("WEBVIEW_DEV_URL"))
+        if (dev[0] != '\0')
+            return std::string(dev);
     std::string p = std::string(SDL_GetBasePath()) + "../web/dist";
 #if defined(__APPLE__)
     char resolved[PATH_MAX];
@@ -424,6 +431,19 @@ static int l_app_quit(lua_State* /*L*/) {
     return 0;
 }
 
+// engine.entities.add(id, name, x, y, angle, vx, vy)
+static int l_engine_entities_add(lua_State* L) {
+    const char* id   = luaL_checkstring(L, 1);
+    const char* name = luaL_checkstring(L, 2);
+    float       x    = (float)luaL_checknumber(L, 3);
+    float       y    = (float)luaL_checknumber(L, 4);
+    float       ang  = (float)luaL_checknumber(L, 5);
+    float       vx   = (float)luaL_checknumber(L, 6);
+    float       vy   = (float)luaL_checknumber(L, 7);
+    g_entities.add(id, name, x, y, ang, vx, vy);
+    return 0;
+}
+
 // ─── Lua: require() ──────────────────────────────────────────────────────────
 
 static int l_require(lua_State* L) {
@@ -517,6 +537,14 @@ static void registerAPI(lua_State* L) {
     lua_newtable(L);
     lua_pushcfunction(L, l_app_quit, "app.quit"); lua_setfield(L, -2, "quit");
     lua_setglobal(L, "app");
+
+    // engine.* (native services; scripts sync entity registry after world.rebuild)
+    lua_newtable(L);
+    lua_newtable(L);
+    lua_pushcfunction(L, l_engine_entities_add, "engine.entities.add");
+    lua_setfield(L, -2, "add");
+    lua_setfield(L, -2, "entities");
+    lua_setglobal(L, "engine");
 
     // require
     lua_pushcfunction(L, l_require, "require");
@@ -734,9 +762,11 @@ int main(int argc, char* argv[]) {
             &lu_w, &lu_h);
         sync_lua_screen_size(L, lu_w, lu_h);
 
+        g_entities.clear();
         lua_pushnumber(L, dt);
         lua_pushnumber(L, totalTime);
         luaCall(L, "_update", 2, 0);
+        editor_bridge_publish_entity_snapshot(g_entities);
 
         lua_pushnumber(L, totalTime);
         luaCall(L, "_render", 1, 0);

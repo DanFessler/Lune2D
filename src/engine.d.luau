@@ -30,3 +30,18 @@ declare audio: {
 declare app: {
     quit: () -> (),
 }
+
+-- Engine services (native). Scripts register runtime entities; host forwards to tooling separately.
+declare engine: {
+    entities: {
+        add: (
+            id: string,
+            name: string,
+            x: number,
+            y: number,
+            angle: number,
+            vx: number,
+            vy: number
+        ) -> (),
+    },
+}

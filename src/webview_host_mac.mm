@@ -1,6 +1,8 @@
 #import <Cocoa/Cocoa.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <WebKit/WebKit.h>
+#import <objc/message.h>
+#import <objc/runtime.h>
 #include <stdlib.h>
 
 #include <SDL3/SDL.h>
@@ -11,6 +13,48 @@
 #ifndef SDL_PROP_WINDOW_COCOA_WINDOW_POINTER
 #define SDL_PROP_WINDOW_COCOA_WINDOW_POINTER "SDL.window.cocoa.window"
 #endif
+
+// SDL3View registers a full-window cursor rect + mouseMoved invalidates when NSCursor != SDL's
+// desired cursor. That repeatedly resets AppKit's cursor to the arrow and overrides WebKit's CSS
+// cursors (pointer, text, etc.). When a WKWebView overlay exists, skip SDL's addCursorRect pass.
+static IMP s_sdl_view_orig_reset_cursor_rects = nullptr;
+
+static BOOL webview_content_view_has_wkwebviews(NSView* v) {
+    if (!v)
+        return NO;
+    for (NSView* child in v.subviews) {
+        if ([child isKindOfClass:[WKWebView class]])
+            return YES;
+    }
+    return NO;
+}
+
+static void webview_sdl_view_reset_cursor_patched(id self, SEL _cmd) {
+    typedef void (*reset_fn)(id, SEL);
+    if (webview_content_view_has_wkwebviews(self)) {
+        struct objc_super sup = { self, class_getSuperclass(object_getClass(self)) };
+        void (*msg_super)(struct objc_super*, SEL) = (void (*)(struct objc_super*, SEL))objc_msgSendSuper;
+        msg_super(&sup, _cmd);
+        return;
+    }
+    if (s_sdl_view_orig_reset_cursor_rects)
+        ((reset_fn)s_sdl_view_orig_reset_cursor_rects)(self, _cmd);
+}
+
+static void webview_install_sdl_cursor_coexistence_swizzle(NSView* sdlContentView) {
+    if (!sdlContentView)
+        return;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        Class cls = [sdlContentView class];
+        SEL sel = @selector(resetCursorRects);
+        Method m = class_getInstanceMethod(cls, sel);
+        if (!m)
+            return;
+        s_sdl_view_orig_reset_cursor_rects = method_getImplementation(m);
+        method_setImplementation(m, (IMP)webview_sdl_view_reset_cursor_patched);
+    });
+}
 
 static WKWebView* s_webView = nil;
 static NSWindow* s_nsWindow = nil;
@@ -185,6 +229,9 @@ bool webview_host_init(SDL_Window* window, const char* web_root_utf8) {
             return false;
 
         s_nsWindow = (__bridge NSWindow*)pwin;
+        // CSS cursor:* updates need mouse-moved delivery; NSWindow defaults to NO and SDL
+        // does not enable this, so hover cursors (e.g. pointer) stay stuck as the arrow.
+        s_nsWindow.acceptsMouseMovedEvents = YES;
         NSView* contentView = s_nsWindow.contentView;
         if (!contentView)
             return false;
@@ -213,6 +260,7 @@ bool webview_host_init(SDL_Window* window, const char* web_root_utf8) {
 
         apply_webview_transparency(wv);
 
+        webview_install_sdl_cursor_coexistence_swizzle(contentView);
         [contentView addSubview:wv];
         s_webView = wv;
 
@@ -225,9 +273,16 @@ bool webview_host_init(SDL_Window* window, const char* web_root_utf8) {
         NSString* root = [NSString stringWithUTF8String:web_root_utf8];
         if (!root)
             return false;
-        NSURL* base = [NSURL fileURLWithPath:root isDirectory:YES];
-        NSURL* html = [base URLByAppendingPathComponent:@"index.html"];
-        [wv loadFileURL:html allowingReadAccessToURL:base];
+        NSURL* remote = [NSURL URLWithString:root];
+        if (remote && remote.scheme &&
+            ([remote.scheme caseInsensitiveCompare:@"http"] == NSOrderedSame ||
+             [remote.scheme caseInsensitiveCompare:@"https"] == NSOrderedSame)) {
+            [wv loadRequest:[NSURLRequest requestWithURL:remote]];
+        } else {
+            NSURL* base = [NSURL fileURLWithPath:root isDirectory:YES];
+            NSURL* html = [base URLByAppendingPathComponent:@"index.html"];
+            [wv loadFileURL:html allowingReadAccessToURL:base];
+        }
 
         return true;
     }
@@ -277,6 +332,23 @@ bool webview_host_capture_composite_png(SDL_Window* window, const char* pathUtf8
 
         NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
         return png && [png writeToFile:path atomically:YES];
+    }
+}
+
+void webview_host_publish_entities_json(const char* json_utf8) {
+    if (!json_utf8 || !s_webView)
+        return;
+    @autoreleasepool {
+        NSString* payload = [NSString stringWithUTF8String:json_utf8];
+        if (!payload.length)
+            return;
+        NSString* js =
+            [NSString stringWithFormat:@"if(window.__engineOnEntities)window.__engineOnEntities(%@);", payload];
+        [s_webView evaluateJavaScript:js
+                    completionHandler:^(__unused id _Nullable result, NSError* _Nullable error) {
+                        if (error)
+                            NSLog(@"publish_entities: %@", error);
+                    }];
     }
 }
 

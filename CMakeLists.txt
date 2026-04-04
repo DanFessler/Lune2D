@@ -29,6 +29,7 @@ FetchContent_MakeAvailable(luau)
 
 add_executable(asteroids
     src/main.cpp
+    src/editor_bridge.cpp
     src/webview_viewport.cpp
     src/viewport_math.cpp
 )

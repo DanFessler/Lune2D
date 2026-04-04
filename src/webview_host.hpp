@@ -10,7 +10,8 @@ using WebViewGameRectFn =
     void (*)(int x, int y, int w, int h, int ui_space_w, int ui_space_h, void* user);
 
 // Attach a transparent HTML overlay to the SDL window (platform-specific).
-// web_root must be an absolute directory; loads file://.../index.html.
+// web_root: absolute directory containing index.html (file:// load), or an http(s) URL
+// (e.g. http://127.0.0.1:5173/ from `npm run dev` in /web).
 bool webview_host_init(SDL_Window* window, const char* web_root_abs);
 
 void webview_host_shutdown();
@@ -43,3 +44,7 @@ void webview_apply_game_viewport(SDL_Renderer* renderer,
 
 // macOS: capture the full composited window (SDL + WebKit) to a PNG. Stub returns false.
 bool webview_host_capture_composite_png(SDL_Window* window, const char* path_utf8);
+
+// Push entity snapshot JSON (UTF-8) to the web UI: window.__engineOnEntities(payload).
+// Safe when the webview is absent: stub is a no-op.
+void webview_host_publish_entities_json(const char* json_utf8);

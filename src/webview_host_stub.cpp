@@ -22,3 +22,5 @@ void webview_host_get_layout_basis(int* basis_w, int* basis_h) {
 bool webview_host_capture_composite_png(SDL_Window* /*window*/, const char* /*path_utf8*/) {
     return false;
 }
+
+void webview_host_publish_entities_json(const char* /*json_utf8*/) {}

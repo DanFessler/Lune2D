@@ -2,6 +2,7 @@
 -- Engine API types are declared in engine.d.luau (for luau-analyze).
 
 local entities = require("entities")
+local world = require("world")
 
 -- ─── Types (local to this file) ───────────────────────────────────────────────
 
@@ -10,6 +11,9 @@ type Polygon      = { Point }
 type AsteroidSize = "large" | "medium" | "small"
 
 type Asteroid = {
+    id: string,
+    name: string,
+    draw: (Asteroid, number) -> (),
     x: number, y: number,
     vx: number, vy: number,
     angle: number,
@@ -23,6 +27,9 @@ type Asteroid = {
 type GameState = "playing" | "gameover" | "newwave"
 
 type Ship = {
+    id: string,
+    name: string,
+    draw: (Ship, number) -> (),
     x: number, y: number,
     vx: number, vy: number,
     angle: number,
@@ -34,6 +41,9 @@ type Ship = {
 }
 
 type Bullet = {
+    id: string,
+    name: string,
+    draw: (Bullet, number) -> (),
     x: number, y: number,
     vx: number, vy: number,
     life: number,
@@ -100,6 +110,52 @@ local function drawCircleWrapped(cx: number, cy: number, radius: number,
     end
 end
 
+-- Entity draw dispatch (transform is on self; custom per kind)
+local function asteroid_draw(self: Asteroid, _t: number)
+    drawPolyWrapped(self.shape, self.x, self.y, self.angle, 255, 255, 255, 255)
+end
+
+local function bullet_draw(self: Bullet, _t: number)
+    drawCircleWrapped(self.x, self.y, BULLET_RADIUS, 0, 220, 255, 255)
+end
+
+local function ship_draw(self: Ship, totalTime: number)
+    if not self.alive then
+        return
+    end
+    local visible = self.respawnTimer <= 0 or (math.floor(totalTime * 8) % 2 == 0)
+    if visible then
+        local r: number, g: number, b: number
+        if self.respawnTimer > 0 then
+            r, g, b = 160, 160, 160
+        else
+            r, g, b = 255, 255, 255
+        end
+        drawPolyWrapped(SHIP_SHAPE, self.x, self.y, self.angle, r, g, b, 255)
+        if self.thrusting and math.floor(totalTime * 20) % 2 == 0 then
+            drawPolyWrapped(FLAME_SHAPE, self.x, self.y, self.angle, 255, 160, 0, 255)
+        end
+    end
+end
+
+local nextAstId: number = 0
+local nextBulletId: number = 0
+
+local function assignAstId(a: any)
+    local ast = a :: Asteroid
+    nextAstId += 1
+    ast.id = "asteroid_" .. nextAstId
+    ast.name = "Asteroid (" .. ast.size .. ")"
+    ast.draw = asteroid_draw
+end
+
+local function assignBulletId(b: Bullet)
+    nextBulletId += 1
+    b.id = "bullet_" .. nextBulletId
+    b.name = "Bullet " .. nextBulletId
+    b.draw = bullet_draw
+end
+
 local function dist2(ax: number, ay: number, bx: number, by: number): number
     local dx, dy = ax - bx, ay - by
     return dx*dx + dy*dy
@@ -107,8 +163,21 @@ end
 
 -- ─── Game state ───────────────────────────────────────────────────────────────
 
-local ship: Ship = { x=screen.w/2, y=screen.h/2, vx=0, vy=0, angle=270, thrusting=false,
-                     shootTimer=0, respawnTimer=0, alive=true, lives=3 }
+local ship: Ship = {
+    id = "player",
+    name = "Player",
+    draw = ship_draw,
+    x = screen.w / 2,
+    y = screen.h / 2,
+    vx = 0,
+    vy = 0,
+    angle = 270,
+    thrusting = false,
+    shootTimer = 0,
+    respawnTimer = 0,
+    alive = true,
+    lives = 3,
+}
 local bullets: { Bullet }     = {}
 local asteroids: { Asteroid } = {}
 local score: number     = 0
@@ -122,19 +191,34 @@ local fpsFrames: number = 0
 local fpsAccum: number  = 0
 
 local function resetGame()
-    ship       = { x=screen.w/2, y=screen.h/2, vx=0, vy=0, angle=270, thrusting=false,
-                   shootTimer=0, respawnTimer=0, alive=true, lives=3 }
-    bullets    = {}
-    asteroids  = {}
-    score      = 0
-    wave       = 0
-    state      = "newwave"
-    waveDelay  = 1.5
-    beatTimer  = 0
-    beatIndex  = 0
-    fps        = 0
-    fpsFrames  = 0
-    fpsAccum   = 0
+    nextAstId = 0
+    nextBulletId = 0
+    ship = {
+        id = "player",
+        name = "Player",
+        draw = ship_draw,
+        x = screen.w / 2,
+        y = screen.h / 2,
+        vx = 0,
+        vy = 0,
+        angle = 270,
+        thrusting = false,
+        shootTimer = 0,
+        respawnTimer = 0,
+        alive = true,
+        lives = 3,
+    }
+    bullets = {}
+    asteroids = {}
+    score = 0
+    wave = 0
+    state = "newwave"
+    waveDelay = 1.5
+    beatTimer = 0
+    beatIndex = 0
+    fps = 0
+    fpsFrames = 0
+    fpsAccum = 0
 end
 
 -- ─── Init ─────────────────────────────────────────────────────────────────────
@@ -155,18 +239,18 @@ function _update(dt: number, _totalTime: number)
         fpsAccum  = 0
     end
 
-    if state == "gameover" then return end
-
-    if state == "newwave" then
-        waveDelay -= dt
-        if waveDelay <= 0 then
-            wave      += 1
-            asteroids  = entities.spawnWave(2 + wave)
-            state      = "playing"
-        end
-        return
-    end
-
+    if state ~= "gameover" then
+        if state == "newwave" then
+            waveDelay -= dt
+            if waveDelay <= 0 then
+                wave += 1
+                asteroids = entities.spawnWave(2 + wave)
+                for _, a in ipairs(asteroids) do
+                    assignAstId(a)
+                end
+                state = "playing"
+            end
+        else
     -- ── Ship ──────────────────────────────────────────────────────────────
     ship.shootTimer -= dt
     if ship.respawnTimer > 0 then ship.respawnTimer -= dt end
@@ -203,11 +287,16 @@ function _update(dt: number, _totalTime: number)
             local tx  = ship.x + math.cos(rad) * SHIP_RADIUS * 1.3
             local ty  = ship.y + math.sin(rad) * SHIP_RADIUS * 1.3
             local b: Bullet = {
-                x  = tx, y  = ty,
-                vx = ship.vx + math.cos(rad)*BULLET_SPD,
-                vy = ship.vy + math.sin(rad)*BULLET_SPD,
+                id = "",
+                name = "",
+                draw = bullet_draw,
+                x = tx,
+                y = ty,
+                vx = ship.vx + math.cos(rad) * BULLET_SPD,
+                vy = ship.vy + math.sin(rad) * BULLET_SPD,
                 life = BULLET_LIFE,
             }
+            assignBulletId(b)
             bullets[#bullets+1] = b
             audio.play("shoot")
         end
@@ -247,9 +336,11 @@ function _update(dt: number, _totalTime: number)
                             for _ = 1, 2 do
                                 local spd = randf(40*1.3, 110*1.3)
                                 local ang = randf(0, 2*PI)
-                                newAsts[#newAsts+1] = entities.makeAsteroid(
+                                local na = entities.makeAsteroid(
                                     a.x, a.y, nextSize,
-                                    math.cos(ang)*spd, math.sin(ang)*spd)
+                                    math.cos(ang) * spd, math.sin(ang) * spd)
+                                assignAstId(na)
+                                newAsts[#newAsts+1] = na
                             end
                         end
                         break
@@ -311,6 +402,10 @@ function _update(dt: number, _totalTime: number)
             beatTimer = interval
         end
     end
+        end
+    end
+
+    world.rebuild(ship, asteroids, bullets)
 end
 
 -- ─── Render ───────────────────────────────────────────────────────────────────
@@ -319,25 +414,7 @@ function _render(totalTime: number)
     local W, H = screen.w, screen.h
     draw.clear(0, 0, 0)
 
-    for _, a in ipairs(asteroids) do
-        drawPolyWrapped(a.shape, a.x, a.y, a.angle, 255, 255, 255, 255)
-    end
-
-    for _, b in ipairs(bullets) do
-        drawCircleWrapped(b.x, b.y, BULLET_RADIUS, 0, 220, 255, 255)
-    end
-
-    if ship.alive then
-        local visible = ship.respawnTimer <= 0 or (math.floor(totalTime * 8) % 2 == 0)
-        if visible then
-            local r: number, g: number, b: number
-            if ship.respawnTimer > 0 then r, g, b = 160, 160, 160 else r, g, b = 255, 255, 255 end
-            drawPolyWrapped(SHIP_SHAPE, ship.x, ship.y, ship.angle, r, g, b, 255)
-            if ship.thrusting and math.floor(totalTime * 20) % 2 == 0 then
-                drawPolyWrapped(FLAME_SHAPE, ship.x, ship.y, ship.angle, 255, 160, 0, 255)
-            end
-        end
-    end
+    world.draw_all(totalTime)
 
     draw.number(score, 16, 16, 2.5, 255, 255, 255, 255)
 

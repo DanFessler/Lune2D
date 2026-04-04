@@ -21,28 +21,6 @@
   min-height: 0;
 }
 
-/* Side panels: readable chrome */
-.panel-placeholder {
-  padding: 12px 14px;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.panel-placeholder p {
-  margin: 0 0 8px;
-  color: var(--dockable-colors-text, rgb(200, 207, 211));
-}
-
-.panel-placeholder .muted {
-  font-size: 12px;
-  opacity: 0.8;
-  margin-bottom: 0;
-}
-
-.panel-placeholder a {
-  color: var(--dockable-colors-selected, rgb(46, 104, 162));
-}
-
 /* Center column: transparent "hole" for native game (see useGameRectBridge #game-surface) */
 .game-dock-body {
   flex: 1;
