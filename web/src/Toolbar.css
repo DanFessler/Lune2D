@@ -1,0 +1,66 @@
+.app-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  /* Same strip as .lua-editor-toolbar; vars from .hud-shell outside Dockable.Root */
+  background: var(--dockable-colors-headers);
+  border-bottom: 1px solid var(--dockable-colors-border);
+  flex-shrink: 0;
+  height: 32px;
+  box-sizing: border-box;
+}
+
+.toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 auto;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border: 1px solid var(--dockable-colors-border);
+  border-radius: 4px;
+  background: var(--dockable-colors-background);
+  color: var(--dockable-colors-text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  line-height: 1;
+  transition: background 0.1s, color 0.1s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--dockable-colors-content);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.toolbar-play:not(:disabled) {
+  color: #6c6;
+}
+
+.toolbar-pause:not(:disabled) {
+  color: #fc6;
+}
+
+.toolbar-stop:not(:disabled) {
+  color: #e66;
+}
+
+.toolbar-error {
+  font-size: 11px;
+  color: #f88;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}

@@ -1,6 +1,6 @@
 #pragma once
 
-class EntityRegistry;
+class Scene;
 
-/// Consumes engine entity state and forwards to tooling UIs. Keeps web/UI details out of core types.
-void editor_bridge_publish_entity_snapshot(const EntityRegistry& registry);
+/// Publishes scene + components to tooling UIs as JSON.
+void editor_bridge_publish_scene_snapshot(const Scene& scene);

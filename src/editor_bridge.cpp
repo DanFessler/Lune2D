@@ -1,5 +1,5 @@
 #include "editor_bridge.hpp"
-#include "entity_registry.hpp"
+#include "scene.hpp"
 #include "webview_host.hpp"
 
 #include <cstdio>
@@ -29,26 +29,66 @@ void appendJsonEscaped(std::string& out, const char* s) {
     out.push_back('"');
 }
 
+void appendTransformComponent(std::string& json, const Transform& t) {
+    char buf[384];
+    std::snprintf(buf, sizeof(buf),
+                  "{\"type\":\"Transform\",\"x\":%.8g,\"y\":%.8g,\"angle\":%.8g,"
+                  "\"vx\":%.8g,\"vy\":%.8g,\"sx\":%.8g,\"sy\":%.8g}",
+                  (double)t.x, (double)t.y, (double)t.angle,
+                  (double)t.vx, (double)t.vy, (double)t.sx, (double)t.sy);
+    json += buf;
+}
+
+void appendScriptComponent(std::string& json, const ScriptInstance& s) {
+    json += "{\"type\":\"Script\",\"behavior\":";
+    appendJsonEscaped(json, s.behavior.c_str());
+    json += '}';
+}
+
 } // namespace
 
-void editor_bridge_publish_entity_snapshot(const EntityRegistry& registry) {
-    std::string json = "[";
-    bool        first = true;
-    for (const EntityRecord& e : registry.records()) {
-        if (!first)
+void editor_bridge_publish_scene_snapshot(const Scene& scene) {
+    std::string  json = "[";
+    bool         firstEntity = true;
+    const auto   sorted      = scene.entitiesSortedById();
+    char         idBuf[32];
+
+    for (const Entity* ep : sorted) {
+        const Entity& e = *ep;
+        if (!firstEntity)
             json += ',';
-        first = false;
+        firstEntity = false;
+
+        std::snprintf(idBuf, sizeof(idBuf), "%u", (unsigned)e.id);
         json += '{';
         json += "\"id\":";
-        appendJsonEscaped(json, e.id.c_str());
+        appendJsonEscaped(json, idBuf);
         json += ",\"name\":";
         appendJsonEscaped(json, e.name.c_str());
-        char buf[192];
-        std::snprintf(buf, sizeof(buf),
-                      ",\"x\":%.8g,\"y\":%.8g,\"angle\":%.8g,\"vx\":%.8g,\"vy\":%.8g",
-                      (double)e.x, (double)e.y, (double)e.angle, (double)e.vx, (double)e.vy);
-        json += buf;
-        json += '}';
+        json += e.active ? ",\"active\":true" : ",\"active\":false";
+        json += ",\"drawOrder\":";
+        char oBuf[32];
+        std::snprintf(oBuf, sizeof(oBuf), "%d", e.drawOrder);
+        json += oBuf;
+        json += ",\"updateOrder\":";
+        char uBuf[32];
+        std::snprintf(uBuf, sizeof(uBuf), "%d", e.updateOrder);
+        json += uBuf;
+        if (e.parentId != 0) {
+            char pBuf[32];
+            std::snprintf(pBuf, sizeof(pBuf), ",\"parentId\":\"%u\"", (unsigned)e.parentId);
+            json += pBuf;
+        }
+        json += ",\"components\":[";
+
+
+        appendTransformComponent(json, e.transform);
+        for (const ScriptInstance& sc : e.scripts) {
+            json += ',';
+            appendScriptComponent(json, sc);
+        }
+
+        json += "]}";
     }
     json += ']';
     webview_host_publish_entities_json(json.c_str());

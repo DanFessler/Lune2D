@@ -3,16 +3,29 @@ import * as monaco from "monaco-editor";
 import { useCallback, useEffect, useState } from "react";
 import {
   listLuaFiles,
-  reloadScripts,
-  setGamePaused,
-  startSimulation,
   writeLuaFile,
   type LuaWorkspaceFile,
 } from "./luaEditorBridge";
 import { registerLuauEditorFeatures } from "./monacoLuau";
 import "./LuaEditorPanel.css";
 
-export function LuaEditorPanel() {
+export type LuaEditorOpenRequest = {
+  path: string;
+  /** Optional buffer to show before listLua returns (e.g. just-written file). */
+  content?: string;
+  /** Bump on each open so the same path can be opened again. */
+  id: number;
+};
+
+type LuaEditorPanelProps = {
+  openFileRequest?: LuaEditorOpenRequest | null;
+  onConsumedOpenFileRequest?: () => void;
+};
+
+export function LuaEditorPanel({
+  openFileRequest,
+  onConsumedOpenFileRequest,
+}: LuaEditorPanelProps) {
   const [files, setFiles] = useState<LuaWorkspaceFile[]>([]);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [value, setValue] = useState("");
@@ -30,8 +43,7 @@ export function LuaEditorPanel() {
         setStatus("No .lua files in workspace.");
         return;
       }
-      const preferred =
-        list.find((f) => f.path === "game.lua")?.path ?? list[0].path;
+      const preferred = list[0].path;
       setActivePath((prev) =>
         list.some((f) => f.path === prev) ? prev! : preferred,
       );
@@ -51,47 +63,33 @@ export function LuaEditorPanel() {
     if (f) setValue(f.content);
   }, [activePath, files]);
 
+  useEffect(() => {
+    if (!openFileRequest) return;
+    const { path, content } = openFileRequest;
+    let cancelled = false;
+    void (async () => {
+      if (content !== undefined) setValue(content);
+      await refresh();
+      if (cancelled) return;
+      setActivePath(path);
+      onConsumedOpenFileRequest?.();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openFileRequest?.id, openFileRequest?.path, openFileRequest?.content, refresh, onConsumedOpenFileRequest]);
+
   const onSave = useCallback(async () => {
     if (!activePath) return;
     setStatus(null);
     try {
       await writeLuaFile(activePath, value);
-      setStatus("Saved — scripts reload from disk; use Start when you are ready.");
+      setStatus("Saved.");
       await refresh();
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     }
   }, [activePath, refresh, value]);
-
-  const onStart = useCallback(async () => {
-    setStatus(null);
-    try {
-      await startSimulation();
-      setStatus("Simulation running.");
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  const onReloadScripts = useCallback(async () => {
-    setStatus(null);
-    try {
-      await reloadScripts();
-      setStatus("Scripts reloaded — press Start to play.");
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  const onStop = useCallback(async () => {
-    setStatus(null);
-    try {
-      await setGamePaused(true);
-      setStatus("Paused — Stop held.");
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
 
   const beforeMount = useCallback((m: typeof monaco) => {
     registerLuauEditorFeatures(m);
@@ -120,15 +118,6 @@ export function LuaEditorPanel() {
         </label>
         <button type="button" onClick={() => void onSave()}>
           Save
-        </button>
-        <button type="button" onClick={() => void onStart()}>
-          Start
-        </button>
-        <button type="button" onClick={() => void onReloadScripts()}>
-          Reload scripts
-        </button>
-        <button type="button" onClick={() => void onStop()}>
-          Stop
         </button>
         <button type="button" onClick={() => void refresh()}>
           Refresh list

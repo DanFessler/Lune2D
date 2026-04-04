@@ -55,4 +55,15 @@ void webview_host_set_lua_workspace(const char* lua_dir_abs_utf8);
 // Host callbacks for the JS "engineScript" bridge (Lua editor tooling). Stubs are no-ops.
 void webview_host_set_script_controls(void (*on_reload_request)(void),
                                       void (*on_set_paused)(bool paused),
-                                      void (*on_start_sim_request)(void));
+                                      void (*on_start_sim_request)(bool capture_editor_scene_snapshot));
+
+/// Runs synchronously when the web UI sends `reloadBehaviors` (before the ACK). No-op if unset.
+void webview_host_set_behaviors_reload_fn(void (*reload_fn)(void));
+
+/// macOS: default directory for Save Scene As (`…/lua/scenes`). Stubs ignore.
+void webview_host_set_macos_scenes_directory_for_save_panel(const char* scenes_dir_abs_utf8);
+
+/// macOS: File menu (Save Scene ⌘S, Save Scene As… ⇧⌘S) and app Quit (⌘Q). Stubs are no-ops.
+void webview_host_install_macos_app_menu(void (*on_quit_requested)(void),
+                                         void (*on_save_scene_default)(void),
+                                         void (*on_save_scene_as)(const char* absolute_path_utf8));

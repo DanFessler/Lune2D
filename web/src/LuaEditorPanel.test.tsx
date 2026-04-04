@@ -19,7 +19,7 @@ async function flushListLua(
   deliver({
     requestId: String(msg.requestId ?? ""),
     ok: true,
-    files: [{ path: "game.lua", content: "-- initial" }],
+    files: [{ path: "behaviors/Ship.lua", content: "-- initial" }],
   });
 }
 
@@ -49,61 +49,11 @@ describe("LuaEditorPanel", () => {
     await waitFor(() => {
       const w = posted.find((m) => m.op === "writeLua");
       expect(w?.content).toBe("updated");
-      expect(w?.path).toBe("game.lua");
+      expect(w?.path).toBe("behaviors/Ship.lua");
     });
     const wmsg = posted.find((m) => m.op === "writeLua");
     await act(async () => {
       deliver({ requestId: String(wmsg?.requestId ?? ""), ok: true });
-    });
-  });
-
-  it("Start triggers startSimulation", async () => {
-    const user = userEvent.setup();
-    const { posted, deliver } = captureEngineBridgePosts();
-    render(<LuaEditorPanel />);
-    await waitFor(() => expect(posted.some((m) => m.op === "listLua")).toBe(true));
-    await flushListLua(posted, deliver);
-    await waitFor(() => screen.findByRole("button", { name: /^start$/i }));
-    await user.click(screen.getByRole("button", { name: /^start$/i }));
-    await waitFor(() =>
-      expect(posted.some((m) => m.op === "startSimulation")).toBe(true),
-    );
-    const msg = posted.find((m) => m.op === "startSimulation");
-    await act(async () => {
-      deliver({ requestId: String(msg?.requestId ?? ""), ok: true });
-    });
-  });
-
-  it("Reload scripts triggers restartGame op", async () => {
-    const user = userEvent.setup();
-    const { posted, deliver } = captureEngineBridgePosts();
-    render(<LuaEditorPanel />);
-    await waitFor(() => expect(posted.some((m) => m.op === "listLua")).toBe(true));
-    await flushListLua(posted, deliver);
-    await waitFor(() => screen.findByRole("button", { name: /reload scripts/i }));
-    await user.click(screen.getByRole("button", { name: /reload scripts/i }));
-    await waitFor(() => expect(posted.some((m) => m.op === "restartGame")).toBe(true));
-    const msg = posted.find((m) => m.op === "restartGame");
-    await act(async () => {
-      deliver({ requestId: String(msg?.requestId ?? ""), ok: true });
-    });
-  });
-
-  it("Stop sets paused on the engine", async () => {
-    const user = userEvent.setup();
-    const { posted, deliver } = captureEngineBridgePosts();
-    render(<LuaEditorPanel />);
-    await waitFor(() => expect(posted.some((m) => m.op === "listLua")).toBe(true));
-    await flushListLua(posted, deliver);
-    await waitFor(() => screen.findByRole("button", { name: /stop/i }));
-    await user.click(screen.getByRole("button", { name: /stop/i }));
-    await waitFor(() => {
-      const msg = posted.find((m) => m.op === "setPaused");
-      expect(msg?.paused).toBe(true);
-    });
-    const msg = posted.find((m) => m.op === "setPaused");
-    await act(async () => {
-      deliver({ requestId: String(msg?.requestId ?? ""), ok: true });
     });
   });
 
@@ -134,7 +84,7 @@ describe("LuaEditorPanel", () => {
       deliver({
         requestId: String(list0?.requestId ?? ""),
         ok: true,
-        files: [{ path: "game.lua", content: "v1" }],
+        files: [{ path: "behaviors/Ship.lua", content: "v1" }],
       });
     });
     await waitFor(() =>
@@ -155,7 +105,7 @@ describe("LuaEditorPanel", () => {
       deliver({
         requestId: String(list1?.requestId ?? ""),
         ok: true,
-        files: [{ path: "game.lua", content: "v2" }],
+        files: [{ path: "behaviors/Ship.lua", content: "v2" }],
       });
     });
     await waitFor(() =>

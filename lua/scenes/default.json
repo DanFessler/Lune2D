@@ -1,0 +1,95 @@
+{
+  "entities": [
+    {
+      "drawOrder": 100,
+      "id": 1,
+      "name": "GameDirector",
+      "scripts": [
+        "GameDirector"
+      ],
+      "transform": {
+        "angle": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "updateOrder": 100
+    },
+    {
+      "drawOrder": 2,
+      "id": 2,
+      "name": "Player",
+      "scripts": [
+        "Ship"
+      ],
+      "transform": {
+        "angle": 270.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "x": 245.5,
+        "y": 183.0
+      },
+      "updateOrder": 0
+    },
+    {
+      "drawOrder": 500,
+      "id": 3,
+      "name": "VFX",
+      "scripts": [
+        "VFX"
+      ],
+      "transform": {
+        "angle": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "updateOrder": 50
+    },
+    {
+      "drawOrder": 999,
+      "id": 4,
+      "name": "HUD",
+      "scripts": [
+        "HUD"
+      ],
+      "transform": {
+        "angle": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "updateOrder": 999
+    },
+    {
+      "drawOrder": 0,
+      "id": 5,
+      "name": "Entity",
+      "parentId": 2,
+      "scripts": [
+        "NewBehavior"
+      ],
+      "transform": {
+        "angle": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "x": 30.0,
+        "y": 0.0
+      },
+      "updateOrder": 0
+    }
+  ]
+}

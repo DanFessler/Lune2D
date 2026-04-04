@@ -23,15 +23,38 @@ FetchContent_Declare(
     GIT_TAG        0.714
     GIT_SHALLOW    TRUE
 )
-FetchContent_MakeAvailable(luau)
+
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        v3.11.3
+    GIT_SHALLOW    TRUE
+)
+
+FetchContent_MakeAvailable(luau nlohmann_json)
 
 # ── Executable ────────────────────────────────────────────────────────────────
 
 add_executable(asteroids
     src/main.cpp
+    src/scene.cpp
     src/editor_bridge.cpp
     src/webview_viewport.cpp
     src/viewport_math.cpp
+    src/engine/engine.cpp
+    src/engine/audio_system.cpp
+    src/engine/immediate_draw.cpp
+    src/engine/platform_paths.cpp
+    src/engine/lua/lua_draw.cpp
+    src/engine/lua/lua_input.cpp
+    src/engine/lua/lua_audio.cpp
+    src/engine/lua/lua_app.cpp
+    src/engine/lua/lua_transform.cpp
+    src/engine/lua/lua_runtime.cpp
+    src/engine/lua/lua_require.cpp
+    src/engine/lua/lua_api_register.cpp
+    src/engine/lua/script_host.cpp
+    src/engine/scene_loader.cpp
 )
 
 enable_testing()
@@ -44,14 +67,16 @@ if(APPLE)
     set(CMAKE_OBJCXX_STANDARD 17)
     set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
     target_sources(asteroids PRIVATE src/webview_host_mac.mm)
-    target_link_libraries(asteroids PRIVATE "-framework WebKit" "-framework Cocoa")
+    target_link_libraries(asteroids PRIVATE "-framework WebKit" "-framework Cocoa"
+        "-framework UniformTypeIdentifiers")
 else()
     target_sources(asteroids PRIVATE src/webview_host_stub.cpp)
 endif()
 
 target_include_directories(asteroids PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua
     ${luau_SOURCE_DIR}/VM/include
     ${luau_SOURCE_DIR}/Compiler/include)
 
-target_link_libraries(asteroids PRIVATE SDL3::SDL3 Luau.VM Luau.Compiler)
+target_link_libraries(asteroids PRIVATE SDL3::SDL3 Luau.VM Luau.Compiler nlohmann_json::nlohmann_json)

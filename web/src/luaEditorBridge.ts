@@ -8,6 +8,8 @@ export type EngineScriptResponse = {
   ok: boolean;
   error?: string;
   files?: LuaWorkspaceFile[];
+  /** Scene ops (e.g. runtime.spawn) return the native result here */
+  result?: unknown;
 };
 
 type Pending = (r: EngineScriptResponse) => void;
@@ -115,16 +117,38 @@ export async function writeLuaFile(path: string, content: string): Promise<void>
   await window.__engineScriptBridge!.call("writeLua", { path, content });
 }
 
-/** Reload all Luau scripts from disk (full VM reset). Lands on title screen until Start. */
+/**
+ * Full Luau VM reset (Stop). Restores the scene hierarchy snapshot taken when Play last started
+ * from a stopped state; otherwise reloads the default scene from disk.
+ */
 export async function reloadScripts(): Promise<void> {
   await window.__engineScriptBridge!.call("restartGame", {});
 }
 
-/** Begin or resume simulation (title → first wave, or clears engine pause). */
-export async function startSimulation(): Promise<void> {
-  await window.__engineScriptBridge!.call("startSimulation", {});
+/** Rescan `behaviors/*.lua` into _BEHAVIORS (same VM, scene preserved). Runs synchronously on native before ACK. */
+export async function reloadBehaviors(): Promise<void> {
+  await window.__engineScriptBridge!.call("reloadBehaviors", {});
+}
+
+/**
+ * Begin or resume simulation (HUD play / unpause).
+ * When `captureEditorSnapshot` is true (entering play from stopped), native saves the current
+ * scene for restore on Stop. When false (resuming from pause), the prior snapshot is unchanged.
+ */
+export async function startSimulation(captureEditorSnapshot = true): Promise<void> {
+  await window.__engineScriptBridge!.call("startSimulation", {
+    captureEditorSnapshot,
+  });
 }
 
 export async function setGamePaused(paused: boolean): Promise<void> {
   await window.__engineScriptBridge!.call("setPaused", { paused });
+}
+
+type ListBehaviorsResponse = EngineScriptResponse & { behaviors?: string[] };
+
+export async function listBehaviors(): Promise<string[]> {
+  if (!window.__engineScriptBridge) return [];
+  const res = await window.__engineScriptBridge.call<ListBehaviorsResponse>("listBehaviors", {});
+  return Array.isArray(res.behaviors) ? res.behaviors : [];
 }

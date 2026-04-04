@@ -17,7 +17,7 @@ describe("App dock layout", () => {
 
       expect(screen.getByTitle("Lua")).toBeInTheDocument();
       expect(screen.getByTitle("Game")).toBeInTheDocument();
-      expect(screen.getByTitle("Entities")).toBeInTheDocument();
+      expect(screen.getByTitle("Hierarchy")).toBeInTheDocument();
       expect(screen.getByTitle("Inspector")).toBeInTheDocument();
 
       await waitFor(() =>

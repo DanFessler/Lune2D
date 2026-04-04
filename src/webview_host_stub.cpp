@@ -29,4 +29,12 @@ void webview_host_set_lua_workspace(const char* /*lua_dir_abs_utf8*/) {}
 
 void webview_host_set_script_controls(void (* /*on_reload_request*/)(void),
                                       void (* /*on_set_paused*/)(bool),
-                                      void (* /*on_start_sim_request*/)(void)) {}
+                                      void (* /*on_start_sim_request*/)(bool)) {}
+
+void webview_host_set_behaviors_reload_fn(void (* /*reload_fn*/)(void)) {}
+
+void webview_host_set_macos_scenes_directory_for_save_panel(const char* /*scenes_dir_abs_utf8*/) {}
+
+void webview_host_install_macos_app_menu(void (* /*on_quit*/)(void),
+                                         void (* /*on_save_default*/)(void),
+                                         void (* /*on_save_as*/)(const char*)) {}

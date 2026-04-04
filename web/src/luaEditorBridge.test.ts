@@ -4,6 +4,7 @@ import {
   installEngineScriptBridgeShim,
   isEngineScriptBridgeAvailable,
   listLuaFiles,
+  reloadBehaviors,
   reloadScripts,
   resetEngineScriptBridgeForTests,
   setGamePaused,
@@ -42,7 +43,7 @@ describe("engine script IPC", () => {
       ok: true,
       files: [
         { path: "game.lua", content: "-- hello" },
-        { path: "world.lua", content: "return {}" },
+        { path: "game/session.lua", content: "return {}" },
       ],
     });
     const files = await p;
@@ -72,11 +73,30 @@ describe("engine script IPC", () => {
     await p;
   });
 
-  it("startSimulation sends startSimulation op", async () => {
+  it("reloadBehaviors sends reloadBehaviors op to native", async () => {
+    const { posted, deliver } = captureEngineBridgePosts();
+    const p = reloadBehaviors();
+    expect(posted.some((m) => m.op === "reloadBehaviors")).toBe(true);
+    const msg = posted.find((m) => m.op === "reloadBehaviors");
+    deliver({ requestId: String(msg?.requestId ?? ""), ok: true });
+    await p;
+  });
+
+  it("startSimulation sends op and captureEditorSnapshot (default true)", async () => {
     const { posted, deliver } = captureEngineBridgePosts();
     const p = startSimulation();
     expect(posted.some((m) => m.op === "startSimulation")).toBe(true);
     const msg = posted.find((m) => m.op === "startSimulation");
+    expect(msg?.captureEditorSnapshot).toBe(true);
+    deliver({ requestId: String(msg?.requestId ?? ""), ok: true });
+    await p;
+  });
+
+  it("startSimulation(false) omits saving editor snapshot (resume from pause)", async () => {
+    const { posted, deliver } = captureEngineBridgePosts();
+    const p = startSimulation(false);
+    const msg = posted.find((m) => m.op === "startSimulation");
+    expect(msg?.captureEditorSnapshot).toBe(false);
     deliver({ requestId: String(msg?.requestId ?? ""), ok: true });
     await p;
   });

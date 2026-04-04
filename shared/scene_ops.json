@@ -1,0 +1,14 @@
+[
+  { "op": "runtime.spawn",          "args": [{ "name": "name", "type": "string" }], "returns": "number" },
+  { "op": "runtime.destroy",        "args": [{ "name": "id", "type": "number" }] },
+  { "op": "runtime.setName",        "args": [{ "name": "id", "type": "number" }, { "name": "name", "type": "string" }] },
+  { "op": "runtime.setActive",      "args": [{ "name": "id", "type": "number" }, { "name": "active", "type": "boolean" }] },
+  { "op": "runtime.setDrawOrder",   "args": [{ "name": "id", "type": "number" }, { "name": "order", "type": "number" }] },
+  { "op": "runtime.setUpdateOrder", "args": [{ "name": "id", "type": "number" }, { "name": "order", "type": "number" }] },
+  { "op": "runtime.addScript",      "args": [{ "name": "id", "type": "number" }, { "name": "behavior", "type": "string" }] },
+  { "op": "runtime.removeScript",   "args": [{ "name": "id", "type": "number" }, { "name": "index", "type": "number" }] },
+  { "op": "runtime.reorderScript",  "args": [{ "name": "id", "type": "number" }, { "name": "fromIndex", "type": "number" }, { "name": "toIndex", "type": "number" }] },
+  { "op": "runtime.setParent",      "args": [{ "name": "id", "type": "number" }, { "name": "parentId", "type": "number" }] },
+  { "op": "runtime.removeParent",   "args": [{ "name": "id", "type": "number" }] },
+  { "op": "runtime.setTransform",   "args": [{ "name": "id", "type": "number" }, { "name": "field", "type": "string" }, { "name": "value", "type": "number" }] }
+]
