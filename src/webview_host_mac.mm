@@ -63,6 +63,8 @@ static WKWebView*        s_webView = nil;
 static NSWindow*         s_nsWindow = nil;
 static WebViewGameRectFn s_rectCb   = nullptr;
 static void*             s_rectUser = nullptr;
+static bool              s_webview_visible = true;
+static void              inject_sdl_ui_basis(WKWebView* webView);
 
 static std::string              s_lua_workspace;
 static void (*s_on_script_reload)(void)                = nullptr;
@@ -677,7 +679,7 @@ static TransNavDelegate* s_nav = nil;
 - (void)userContentController:(WKUserContentController*)userContentController
       didReceiveScriptMessage:(WKScriptMessage*)message {
     (void)userContentController;
-    if (!s_rectCb)
+    if (!s_rectCb || !s_webview_visible)
         return;
     if (![message.body isKindOfClass:[NSDictionary class]]) {
         NSLog(@"gameRect: expected NSDictionary, got %@", NSStringFromClass([(id)message.body class]));
@@ -701,6 +703,22 @@ void webview_host_set_game_rect_callback(WebViewGameRectFn fn, void* user) {
     s_rectUser = user;
 }
 
+bool webview_host_toggle_visibility() {
+    @autoreleasepool {
+        if (!s_webView)
+            return false;
+        s_webview_visible = !s_webview_visible;
+        s_webView.hidden = s_webview_visible ? NO : YES;
+        if (s_webview_visible)
+            inject_sdl_ui_basis(s_webView);
+        return s_webview_visible;
+    }
+}
+
+bool webview_host_web_overlay_visible() {
+    return s_webView != nil && s_webview_visible;
+}
+
 // Same geometry as web/index.html postRect — returned JSON survives file:// where postMessage may not.
 static NSString* const kDomLayoutPollJS =
     @"(function(){var s=document.getElementById('game-surface');if(!s)return '';var r=s.getBoundingClientRect();"
@@ -712,7 +730,7 @@ static NSString* const kDomLayoutPollJS =
 
 void webview_host_poll_dom_layout(void) {
     @autoreleasepool {
-        if (!s_webView || !s_rectCb)
+        if (!s_webView || !s_rectCb || !s_webview_visible)
             return;
 
         static BOOL inflight = NO;
@@ -824,6 +842,7 @@ bool webview_host_init(SDL_Window* window, const char* web_root_utf8) {
         webview_install_sdl_cursor_coexistence_swizzle(contentView);
         [contentView addSubview:wv];
         s_webView = wv;
+        s_webview_visible = true;
 
         // Child scroll views often appear after layout; fix again next tick.
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -933,5 +952,6 @@ void webview_host_shutdown() {
         s_engineScriptBridge = nil;
         s_nav = nil;
         s_nsWindow = nil;
+        s_webview_visible = true;
     }
 }

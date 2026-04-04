@@ -20,6 +20,12 @@ void webview_host_on_window_resized(int pixel_w, int pixel_h);
 
 void webview_host_set_game_rect_callback(WebViewGameRectFn fn, void* user);
 
+// Toggle editor overlay visibility. Returns true when visible after toggle.
+bool webview_host_toggle_visibility();
+
+// macOS: false while WKWebView overlay is hidden. Stub: false (no overlay).
+bool webview_host_web_overlay_visible();
+
 // Pull #game-surface rect from the page via evaluateJavaScript (works when window.webkit.postMessage does not).
 void webview_host_poll_dom_layout();
 

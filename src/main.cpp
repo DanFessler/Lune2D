@@ -183,6 +183,19 @@ int main(int argc, char* argv[]) {
                 SDL_GetWindowSizeInPixels(g_eng.window, &pw, &ph);
                 webview_host_on_window_resized(pw, ph);
             } else if (ev.type == SDL_EVENT_KEY_DOWN) {
+                if (!ev.key.repeat && ev.key.key == SDLK_TAB) {
+                    bool uiVisible = webview_host_toggle_visibility();
+                    if (!uiVisible) {
+                        // Hidden overlay should not constrain the game viewport to stale DOM rects.
+                        s_ui_game_x = 0;
+                        s_ui_game_y = 0;
+                        s_ui_game_w = 0;
+                        s_ui_game_h = 0;
+                        s_ui_space_w = 0;
+                        s_ui_space_h = 0;
+                    }
+                    continue;
+                }
                 const char* keyName = nullptr;
                 switch (ev.key.key) {
                 case SDLK_LEFT: keyName = "left"; break;
@@ -239,9 +252,15 @@ int main(int argc, char* argv[]) {
 
         webview_host_poll_dom_layout();
 
-        int lu_w = SCREEN_W, lu_h = SCREEN_H;
+        // Design-resolution basis with web layout; when the overlay is hidden (or absent), use the
+        // live window client size so the game fills the resized window in Luau coordinates.
+        int layout_w = SCREEN_W, layout_h = SCREEN_H;
+        if (!webview_host_web_overlay_visible())
+            SDL_GetWindowSize(g_eng.window, &layout_w, &layout_h);
+
+        int lu_w = layout_w, lu_h = layout_h;
         webview_apply_game_viewport(g_eng.renderer, g_eng.window,
-                                    SCREEN_W, SCREEN_H,
+                                    layout_w, layout_h,
                                     s_ui_game_x, s_ui_game_y, s_ui_game_w, s_ui_game_h,
                                     s_ui_space_w, s_ui_space_h, s_native_game_rect_pct,
                                     &lu_w, &lu_h);

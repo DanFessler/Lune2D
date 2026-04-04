@@ -10,6 +10,14 @@ void webview_host_on_window_resized(int /*pixel_w*/, int /*pixel_h*/) {}
 
 void webview_host_set_game_rect_callback(WebViewGameRectFn /*fn*/, void* /*user*/) {}
 
+bool webview_host_toggle_visibility() {
+    return false;
+}
+
+bool webview_host_web_overlay_visible() {
+    return false;
+}
+
 void webview_host_poll_dom_layout() {}
 
 void webview_host_get_layout_basis(int* basis_w, int* basis_h) {
