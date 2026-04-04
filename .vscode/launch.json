@@ -2,11 +2,11 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "asteroids (WEBVIEW_INSPECTABLE)",
+      "name": "lune2d (WEBVIEW_INSPECTABLE)",
       "type": "cppdbg",
       "request": "launch",
       "preLaunchTask": "make build",
-      "program": "${workspaceFolder}/build/asteroids",
+      "program": "${workspaceFolder}/build/lune2d",
       "args": [],
       "cwd": "${workspaceFolder}",
       "environment": [
@@ -18,11 +18,11 @@
       "MIMode": "lldb"
     },
     {
-      "name": "asteroids (WEBVIEW_INSPECTABLE, CodeLLDB)",
+      "name": "lune2d (WEBVIEW_INSPECTABLE, CodeLLDB)",
       "type": "lldb",
       "request": "launch",
       "preLaunchTask": "make build",
-      "program": "${workspaceFolder}/build/asteroids",
+      "program": "${workspaceFolder}/build/lune2d",
       "cwd": "${workspaceFolder}",
       "env": {
         "WEBVIEW_INSPECTABLE": "1"

@@ -124,7 +124,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    g_eng.window   = SDL_CreateWindow("Asteroids", SCREEN_W, SCREEN_H, SDL_WINDOW_RESIZABLE);
+    g_eng.window   = SDL_CreateWindow("Lune2D", SCREEN_W, SCREEN_H, SDL_WINDOW_RESIZABLE);
     g_eng.renderer = SDL_CreateRenderer(g_eng.window, nullptr);
     if (!g_eng.window || !g_eng.renderer) {
         SDL_Log("Window/Renderer failed: %s", SDL_GetError());

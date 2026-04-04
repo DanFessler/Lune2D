@@ -1,12 +1,12 @@
-# AGENTS.md — ctx-style engine + editor (Asteroids sample)
+# AGENTS.md — Lune2D (ctx-style engine + editor, Asteroids sample)
 
-This file orients AI agents and contributors to **what this repository is**, **what we’re building toward**, and **how it relates to ctx-engine / ctx-game**.
+This file orients AI agents and contributors to **what this repository is**, **what we’re building toward**, and **how it relates to ctx-engine / [ctx-game](https://github.com/DanFessler/ctx-game)**.
 
 ## What this project is
 
 A **general-purpose, small game engine and editor harness**, not “an Asteroids codebase” first:
 
-- **Native host** — **SDL3** window/render loop, input snapshot, audio, **embedded Luau** VM, `**Scene`** (entities, hierarchy, transforms, script list), immediate-mode **draw** / **screen** bindings, **runtime** scene ops from Luau.
+- **Native host** — **SDL3** window/render loop, input snapshot, audio, **embedded Luau** VM, **Scene** (entities, hierarchy, transforms, script list), immediate-mode **draw** / **screen** bindings, **runtime** scene ops from Luau.
 - **Tooling shell** — **WebKit** overlay (or **Vite** in dev) with React: **scene hierarchy**, **inspector**, **Luau editor** (Monaco), toolbar **Play / Pause / Stop** (VM + editor snapshot behavior), **macOS** File menu (Save Scene ⌘S, Save As ⇧⌘S, Quit ⌘Q).
 
 The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native ↔ web IPC carries script/workspace ops, scene edits, and entity snapshots.
@@ -18,7 +18,7 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 1. **Tight edit-run loop** — Change Luau or scene JSON, reload behaviors or full VM where appropriate, without unnecessary friction.
 2. **Scene as data** — JSON under `lua/scenes/` (optional stable entity `id` for round-trip save); behaviors under `lua/behaviors/`. Other titles can add their own scenes and retire/replace the sample.
 3. **Behavior model** — Each behavior module **returns a table** of lifecycle hooks (`start`, `update`, `draw`, `keydown`, `onHudPlay`, …) in `_BEHAVIORS`; C++ dispatches by name. **Strict Luau** (`--!strict`) is the norm for project scripts.
-4. **Editor parity with “ctx-game”-style UX** — Dockable panels, inspector patterns, dnd-kit sortable rows where noted; parity is **behavioral**, not identical widgets.
+4. **Editor parity with [ctx-game](https://github.com/DanFessler/ctx-game)-style UX** — Dockable panels, inspector patterns, dnd-kit sortable rows where noted; parity is **behavioral**, not identical widgets.
 5. **Stability** — Web: Vitest for bridge/UI. Native: CMake build green after C++/ObjC++ changes.
 
 ## Repository layout (high level)
@@ -39,7 +39,7 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 
 ## Reference: **ctx-game** (UI / tooling)
 
-**ctx-game** informs **editor UX** (dockable tools, inspector). This repo uses **@danfessler/react-dockable** and may diverge where the library does.
+**[ctx-game](https://github.com/DanFessler/ctx-game)** — canvas2D engine with a Unity-like editor (TypeScript); informs **editor UX** here (dockable tools, inspector). This repo uses **@danfessler/react-dockable** and may diverge where the library does.
 
 ## Conventions for agents
 

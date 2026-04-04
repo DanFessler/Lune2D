@@ -20,7 +20,7 @@ build: web
 	cmake --build build
 
 run: build
-	./build/asteroids
+	./build/lune2d
 
 # Native app + Vite HMR (no `npm run build`). Ctrl+C stops both.
 dev: web-install build-native
@@ -32,9 +32,9 @@ dev: web-install build-native
 	  i=$$((i+1)); sleep 0.25; \
 	done; \
 	if [ -z "$$ready" ]; then echo "error: Vite did not respond at $(WEB_DEV_URL)"; exit 1; fi; \
-	WEBVIEW_DEV_URL="$(WEB_DEV_URL)" WEBVIEW_INSPECTABLE=1 ./build/asteroids
+	WEBVIEW_DEV_URL="$(WEB_DEV_URL)" WEBVIEW_INSPECTABLE=1 ./build/lune2d
 
-# Vite only (use a second terminal for ./build/asteroids with WEBVIEW_DEV_URL set).
+# Vite only (use a second terminal for ./build/lune2d with WEBVIEW_DEV_URL set).
 dev-web: web-install
 	cd web && npm run dev -- --host 127.0.0.1 --port $(WEB_DEV_PORT) --strictPort
 

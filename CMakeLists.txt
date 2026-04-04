@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Asteroids)
+project(lune2d)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,7 +35,7 @@ FetchContent_MakeAvailable(luau nlohmann_json)
 
 # ── Executable ────────────────────────────────────────────────────────────────
 
-add_executable(asteroids
+add_executable(lune2d
     src/main.cpp
     src/scene.cpp
     src/editor_bridge.cpp
@@ -66,17 +66,17 @@ if(APPLE)
     enable_language(OBJCXX)
     set(CMAKE_OBJCXX_STANDARD 17)
     set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
-    target_sources(asteroids PRIVATE src/webview_host_mac.mm)
-    target_link_libraries(asteroids PRIVATE "-framework WebKit" "-framework Cocoa"
+    target_sources(lune2d PRIVATE src/webview_host_mac.mm)
+    target_link_libraries(lune2d PRIVATE "-framework WebKit" "-framework Cocoa"
         "-framework UniformTypeIdentifiers")
 else()
-    target_sources(asteroids PRIVATE src/webview_host_stub.cpp)
+    target_sources(lune2d PRIVATE src/webview_host_stub.cpp)
 endif()
 
-target_include_directories(asteroids PRIVATE
+target_include_directories(lune2d PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua
     ${luau_SOURCE_DIR}/VM/include
     ${luau_SOURCE_DIR}/Compiler/include)
 
-target_link_libraries(asteroids PRIVATE SDL3::SDL3 Luau.VM Luau.Compiler nlohmann_json::nlohmann_json)
+target_link_libraries(lune2d PRIVATE SDL3::SDL3 Luau.VM Luau.Compiler nlohmann_json::nlohmann_json)

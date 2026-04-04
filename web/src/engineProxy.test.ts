@@ -37,9 +37,9 @@ describe("engine proxy", () => {
   });
 
   it("sends runtime.spawn and returns the result", async () => {
-    const p = engine.runtime.spawn("Asteroid");
+    const p = engine.runtime.spawn("Entity");
     expect(posted[0].op).toBe("runtime.spawn");
-    expect(posted[0].args).toEqual(["Asteroid"]);
+    expect(posted[0].args).toEqual(["Entity"]);
 
     deliver({ requestId: String(posted[0].requestId), ok: true, result: 42 });
     await expect(p).resolves.toEqual(

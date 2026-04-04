@@ -85,10 +85,10 @@ static void (*s_on_save_scene_as)(const char* abs_utf8)  = nullptr;
 static std::string         s_scenes_dir_for_save_panel;
 static id                  s_key_cmd_q_monitor            = nil;
 
-@interface AsteroidsMenuHandler : NSObject
+@interface Lune2dMenuHandler : NSObject
 @end
 
-@implementation AsteroidsMenuHandler
+@implementation Lune2dMenuHandler
 - (void)menuQuit:(id)sender {
     (void)sender;
     if (s_on_quit_requested)
@@ -126,7 +126,7 @@ static id                  s_key_cmd_q_monitor            = nil;
 }
 @end
 
-static AsteroidsMenuHandler* s_menu_handler = nil;
+static Lune2dMenuHandler* s_menu_handler = nil;
 
 void webview_host_set_macos_scenes_directory_for_save_panel(const char* scenes_dir_abs_utf8) {
     s_scenes_dir_for_save_panel = scenes_dir_abs_utf8 ? scenes_dir_abs_utf8 : "";
@@ -144,15 +144,12 @@ void webview_host_install_macos_app_menu(void (*on_quit_requested)(void),
 
         [NSApplication sharedApplication];
         if (!s_menu_handler)
-            s_menu_handler = [AsteroidsMenuHandler new];
+            s_menu_handler = [Lune2dMenuHandler new];
 
         // Replace stub SDL menu so ⌘Q / standard shortcuts reach the responder chain.
         NSMenu* mainMenu = [[NSMenu alloc] initWithTitle:@"MainMenu"];
 
-        NSString* appName =
-            [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
-        if (!appName.length)
-            appName = [[NSProcessInfo processInfo] processName];
+        NSString* appName = @"Lune2D";
 
         NSMenuItem* appMenuItem = [[NSMenuItem alloc] init];
         [mainMenu addItem:appMenuItem];

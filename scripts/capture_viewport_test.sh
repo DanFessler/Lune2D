@@ -8,7 +8,7 @@ case "$OUT" in
   *) OUT="$ROOT/${OUT#./}" ;;
 esac
 mkdir -p "$(dirname "$OUT")"
-ARGS=("$ROOT/build/asteroids")
+ARGS=("$ROOT/build/lune2d")
 # CAPTURE_NATIVE=1: compute % rect in C++ (still uses JS layout size as %-basis when posted).
 [[ "${CAPTURE_NATIVE:-}" == 1 ]] && ARGS+=(--native-game-rect)
 ARGS+=(--capture-after-frames 200 --capture-window-png "$OUT")
