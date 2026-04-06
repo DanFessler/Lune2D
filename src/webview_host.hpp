@@ -52,6 +52,8 @@ void webview_apply_game_viewport(SDL_Renderer *renderer,
 
 // Map a window-relative mouse position to Luau / game draw coordinates (0..lu_w/h).
 // Returns false if the point is outside the game inset (same basis as webview_apply_game_viewport).
+// When clamp_to_game_viewport is true, the output pixel is clamped to the game viewport rect first
+// (for editor drags that briefly leave the inset while the button stays down).
 bool webview_window_mouse_to_luau(SDL_Window *window,
                                   SDL_Renderer *renderer,
                                   int logical_w,
@@ -66,7 +68,8 @@ bool webview_window_mouse_to_luau(SDL_Window *window,
                                   float window_mouse_x,
                                   float window_mouse_y,
                                   float *out_lu_x,
-                                  float *out_lu_y);
+                                  float *out_lu_y,
+                                  bool clamp_to_game_viewport = false);
 
 // macOS: capture the full composited window (SDL + WebKit) to a PNG. Stub returns false.
 bool webview_host_capture_composite_png(SDL_Window *window, const char *path_utf8);

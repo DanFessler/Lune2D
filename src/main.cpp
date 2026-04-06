@@ -84,7 +84,8 @@ static bool main_layout_dimensions(int *layout_w, int *layout_h)
     return true;
 }
 
-static bool main_window_mouse_to_lu(float window_mx, float window_my, float *lu_x, float *lu_y)
+static bool main_window_mouse_to_lu(float window_mx, float window_my, float *lu_x, float *lu_y,
+                                    bool clamp_to_game = false)
 {
     int layout_w = SCREEN_W, layout_h = SCREEN_H;
     main_layout_dimensions(&layout_w, &layout_h);
@@ -93,7 +94,7 @@ static bool main_window_mouse_to_lu(float window_mx, float window_my, float *lu_
         layout_w, layout_h,
         s_ui_game_x, s_ui_game_y, s_ui_game_w, s_ui_game_h,
         s_ui_space_w, s_ui_space_h, s_native_game_rect_pct,
-        window_mx, window_my, lu_x, lu_y);
+        window_mx, window_my, lu_x, lu_y, clamp_to_game);
 }
 
 // Native pick/drag removed — handled by engine Luau `lua/editor/Transform.lua` via editorInput APIs.
@@ -261,7 +262,11 @@ int main(int argc, char *argv[])
                     float lx, ly;
                     float mx = (ev.type == SDL_EVENT_MOUSE_MOTION) ? ev.motion.x : ev.button.x;
                     float my = (ev.type == SDL_EVENT_MOUSE_MOTION) ? ev.motion.y : ev.button.y;
-                    if (main_window_mouse_to_lu(mx, my, &lx, &ly))
+                    bool in_game = main_window_mouse_to_lu(mx, my, &lx, &ly);
+                    if (!in_game && ev.type == SDL_EVENT_MOUSE_MOTION &&
+                        (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK))
+                        in_game = main_window_mouse_to_lu(mx, my, &lx, &ly, true);
+                    if (in_game)
                         eng_editor_input_set_mouse(lx, ly);
 
                     if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT)

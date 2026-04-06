@@ -102,6 +102,13 @@ static void webview_install_sdl_cursor_coexistence_swizzle(NSView* sdlContentVie
 // Used by Lune2DWebView to pass mouse events through to SDL in the viewport area.
 static NSRect s_game_passthrough_rect = NSZeroRect;
 
+// When a mouse button is held, route drags consistently to the surface that received the press:
+// web-originated drags keep events in WKWebView even over the SDL game hole; game-originated
+// clicks pass through normally. An NSEvent local monitor stamps the origin on mouseDown (before
+// hitTest runs), and hitTest: clears it when all buttons are released.
+static BOOL s_web_drag_active = NO;
+static id   s_mouse_drag_monitor = nil;
+
 @interface Lune2DWebView : WKWebView
 @end
 
@@ -131,16 +138,15 @@ static NSRect s_game_passthrough_rect = NSZeroRect;
 }
 
 - (NSView*)hitTest:(NSPoint)point {
+    if ([NSEvent pressedMouseButtons] == 0)
+        s_web_drag_active = NO;
+
+    if (s_web_drag_active)
+        return [super hitTest:point];
+
     if ([self lune2d_hitInGamePassthrough:point])
         return nil;
     return [super hitTest:point];
-}
-
-- (NSView*)hitTest:(NSPoint)point withEvent:(NSEvent*)event {
-    (void)event;
-    if ([self lune2d_hitInGamePassthrough:point])
-        return nil;
-    return [super hitTest:point withEvent:event];
 }
 @end
 
@@ -897,6 +903,7 @@ bool webview_host_toggle_visibility() {
             inject_sdl_ui_basis(s_webView);
         } else {
             s_game_passthrough_rect = NSZeroRect;
+            s_web_drag_active = NO;
             SDL_ResetKeyboard();
             s_was_overlay_keyboard_focus = false;
         }
@@ -1035,6 +1042,23 @@ bool webview_host_init(SDL_Window* window, const char* web_root_utf8) {
         s_webView = wv;
         s_webview_visible = true;
 
+        // Local event monitor: stamp web drag origin on mouseDown BEFORE hitTest runs.
+        // NSEvent local monitors fire inside [NSApp sendEvent:] before the event reaches
+        // the window, so s_web_drag_active is set by the time hitTest: is called.
+        if (!s_mouse_drag_monitor) {
+            NSEventMask mask = NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown |
+                               NSEventMaskOtherMouseDown;
+            s_mouse_drag_monitor = [NSEvent addLocalMonitorForEventsMatchingMask:mask
+                handler:^NSEvent*(NSEvent* event) {
+                    if (event.window != s_nsWindow || !s_webView || !s_webview_visible)
+                        return event;
+                    NSPoint windowPt = event.locationInWindow;
+                    NSPoint superPt = [s_webView.superview convertPoint:windowPt fromView:nil];
+                    s_web_drag_active = ![s_webView lune2d_hitInGamePassthrough:superPt];
+                    return event;
+                }];
+        }
+
         // Child scroll views often appear after layout; fix again next tick.
         dispatch_async(dispatch_get_main_queue(), ^{
             apply_webview_transparency(s_webView);
@@ -1154,6 +1178,11 @@ void webview_host_shutdown() {
             [NSEvent removeMonitor:s_key_cmd_q_monitor];
             s_key_cmd_q_monitor = nil;
         }
+        if (s_mouse_drag_monitor) {
+            [NSEvent removeMonitor:s_mouse_drag_monitor];
+            s_mouse_drag_monitor = nil;
+        }
+        s_web_drag_active = NO;
         s_menu_handler = nil;
 
         WKWebView* wv = s_webView;

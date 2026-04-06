@@ -89,7 +89,8 @@ bool webview_window_mouse_to_luau(SDL_Window *window,
                                   float window_mouse_x,
                                   float window_mouse_y,
                                   float *out_lu_x,
-                                  float *out_lu_y)
+                                  float *out_lu_y,
+                                  bool clamp_to_game_viewport)
 {
     if (!out_lu_x || !out_lu_y)
         return false;
@@ -130,7 +131,22 @@ bool webview_window_mouse_to_luau(SDL_Window *window,
     float ry = window_mouse_y * (out_h / (float)wh);
 
     if (rx < lay.px || ry < lay.py || rx >= lay.px + lay.pw || ry >= lay.py + lay.ph)
-        return false;
+    {
+        if (!clamp_to_game_viewport || lay.pw < 1 || lay.ph < 1)
+            return false;
+        const float px0 = (float)lay.px;
+        const float py0 = (float)lay.py;
+        const float px1 = px0 + (float)lay.pw - 1e-4f;
+        const float py1 = py0 + (float)lay.ph - 1e-4f;
+        if (rx < px0)
+            rx = px0;
+        else if (rx > px1)
+            rx = px1;
+        if (ry < py0)
+            ry = py0;
+        else if (ry > py1)
+            ry = py1;
+    }
 
     *out_lu_x = (rx - lay.px) * (float)lay.lu_w / (float)std::max(1, lay.pw);
     *out_lu_y = (ry - lay.py) * (float)lay.lu_h / (float)std::max(1, lay.ph);

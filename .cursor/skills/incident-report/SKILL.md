@@ -37,16 +37,16 @@ Follow `docs/incidents/TEMPLATE.md` closely. Priorities:
 
 ## Refactor plan (deliverable format)
 
-When a refactor is **necessary or strongly advisable**, put the full executable **plan** (not code) in **`docs/plans/<filename>.md`**. Link back to the triggering incident at the top of the plan (relative path to `docs/incidents/…`). The plan file should include:
+When a refactor is **necessary or strongly advisable**, put the full executable **plan** (not code) in **`docs/plans/<filename>.plan.md`**. Link back to the triggering incident at the top of the plan (relative path to `docs/incidents/…`). The plan file should include:
 
-| Block | Content |
-| ----- | ------- |
-| **Goal** | What improves (coupling, clarity, failure modes, testability). |
-| **Non-goals** | What this plan explicitly will not do. |
-| **Proposed shape** | Target modules/boundaries or data flow in plain language. |
-| **Plan (ordered steps)** | Incremental steps (each verifiable—build/tests). |
-| **Risks / regressions** | What could break; how to detect it. |
-| **Rollout** | Feature flags, phased migration, or “big bang” with justification. |
+| Block                    | Content                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| **Goal**                 | What improves (coupling, clarity, failure modes, testability).     |
+| **Non-goals**            | What this plan explicitly will not do.                             |
+| **Proposed shape**       | Target modules/boundaries or data flow in plain language.          |
+| **Plan (ordered steps)** | Incremental steps (each verifiable—build/tests).                   |
+| **Risks / regressions**  | What could break; how to detect it.                                |
+| **Rollout**              | Feature flags, phased migration, or “big bang” with justification. |
 
 If the change is policy-level or cross-cutting, note in the plan whether **`docs/adr/`** (or repo ADR convention) should gain an entry and **one sentence** on the decision being recorded.
 
