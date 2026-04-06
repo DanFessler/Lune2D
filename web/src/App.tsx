@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NewScriptDialog } from "./editor/NewScriptDialog";
 import SceneHierarchy from "./editor/views/SceneHierarchy";
 import EngineInspector from "./editor/views/EngineInspector";
-import { inspectorTabActions, sceneHierarchyTabActions } from "./editor/tabActions";
+import {
+  inspectorTabActions,
+  sceneHierarchyTabActions,
+} from "./editor/tabActions";
 import { LuaEditorPanel, type LuaEditorOpenRequest } from "./LuaEditorPanel";
 import { Toolbar } from "./Toolbar";
 import type { SceneOpResult } from "./generated/sceneOps";
@@ -51,6 +54,23 @@ export default function App() {
   useEffect(() => {
     void listBehaviors().then(setBehaviorNames);
   }, []);
+
+  useEffect(() => {
+    window.__engineSelectEntity = (id: number | string | null) => {
+      if (id == null || id === "") setSelectedId(null);
+      else setSelectedId(String(id));
+    };
+    return () => {
+      if (window.__engineSelectEntity) delete window.__engineSelectEntity;
+    };
+  }, []);
+
+  useEffect(() => {
+    const bridge = window.__engineScriptBridge;
+    if (!bridge) return;
+    const args: unknown[] = selectedId == null ? [null] : [Number(selectedId)];
+    void bridge.call("editor.setSelectedEntity", { args }).catch(() => {});
+  }, [selectedId]);
 
   const [inspectorNewScriptOpen, setInspectorNewScriptOpen] = useState(false);
 

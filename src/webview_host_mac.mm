@@ -10,6 +10,7 @@
 #include <SDL3/SDL.h>
 
 #include "webview_host.hpp"
+#include "editor_state.hpp"
 #include "engine/engine.hpp"
 #include "engine/lua/lua_runtime.hpp"
 
@@ -442,6 +443,40 @@ static void script_bridge_send(NSDictionary* payload) {
                 [files addObject:@{@"path" : rel, @"content" : bText}];
             }
         }
+        NSString*            edDir = [dir stringByAppendingPathComponent:@"editor"];
+        BOOL                 isEdDir = NO;
+        if ([fm fileExistsAtPath:edDir isDirectory:&isEdDir] && isEdDir) {
+            NSArray<NSString*>* enames = [fm contentsOfDirectoryAtPath:edDir error:&err];
+            if (!enames) {
+                script_bridge_send(@{
+                    @"requestId" : rid,
+                    @"ok" : @NO,
+                    @"error" : err.localizedDescription ?: @"list editor/ failed"
+                });
+                return;
+            }
+            for (NSString* ename in enames) {
+                if (![ename hasSuffix:@".lua"])
+                    continue;
+                NSString* rel = [NSString stringWithFormat:@"editor/%@", ename];
+                if (!script_rel_path_ok(rel))
+                    continue;
+                NSString* eFull = [edDir stringByAppendingPathComponent:ename];
+                NSString* eText =
+                    [NSString stringWithContentsOfFile:eFull
+                                              encoding:NSUTF8StringEncoding
+                                                 error:&err];
+                if (!eText) {
+                    script_bridge_send(@{
+                        @"requestId" : rid,
+                        @"ok" : @NO,
+                        @"error" : err.localizedDescription ?: @"read failed"
+                    });
+                    return;
+                }
+                [files addObject:@{@"path" : rel, @"content" : eText}];
+            }
+        }
         NSString*            scnDir = [dir stringByAppendingPathComponent:@"scenes"];
         BOOL                 isScnDir = NO;
         if ([fm fileExistsAtPath:scnDir isDirectory:&isScnDir] && isScnDir) {
@@ -560,6 +595,19 @@ static void script_bridge_send(NSDictionary* payload) {
         for (const auto& b : g_registered_behaviors)
             [names addObject:[NSString stringWithUTF8String:b.c_str()]];
         script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"behaviors" : names});
+        return;
+    }
+
+    if ([op isEqualToString:@"editor.setSelectedEntity"]) {
+        NSArray* a = d[@"args"];
+        uint32_t eid = 0;
+        if ([a isKindOfClass:[NSArray class]] && [a count] > 0) {
+            id v = a[0];
+            if (v != nil && v != [NSNull null] && [v respondsToSelector:@selector(unsignedIntValue)])
+                eid = (uint32_t)[v unsignedIntValue];
+        }
+        eng_editor_set_selected_entity(eid);
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
         return;
     }
 
@@ -1001,6 +1049,22 @@ void webview_host_publish_entities_json(const char* json_utf8) {
                     completionHandler:^(__unused id _Nullable result, NSError* _Nullable error) {
                         if (error)
                             NSLog(@"publish_entities: %@", error);
+                    }];
+    }
+}
+
+void webview_host_notify_selected_entity(uint32_t entity_id) {
+    if (!s_webView)
+        return;
+    @autoreleasepool {
+        NSString* arg = entity_id > 0 ? [NSString stringWithFormat:@"%u", (unsigned)entity_id] : @"null";
+        NSString* js = [NSString stringWithFormat:
+                                @"if(typeof window.__engineSelectEntity==='function')window.__engineSelectEntity(%@);",
+                                arg];
+        [s_webView evaluateJavaScript:js
+                    completionHandler:^(__unused id _Nullable result, NSError* _Nullable error) {
+                        if (error)
+                            NSLog(@"notify_selected_entity: %@", error);
                     }];
     }
 }

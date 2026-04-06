@@ -23,7 +23,6 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 
 ## Repository layout (high level)
 
-
 | Area       | Role                                                                                                                                                     |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/`     | Engine + app glue: SDL loop, `Scene`, Luau runtime APIs, draw/input/audio, **WebKit host** (`webview_host_mac.mm`), scene load/save (`scene_loader.cpp`) |
@@ -31,7 +30,6 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 | `web/`     | React **editor**: dockable layout, hierarchy, inspector, Lua panel, generated bridge helpers                                                             |
 | `scripts/` | e.g. `gen-scene-ops.mjs` for RPC surface                                                                                                                 |
 | `shared/`  | Cross-cutting artifacts (schema/codegen, etc.)                                                                                                           |
-
 
 ## Reference: **ctx-engine**
 
@@ -67,8 +65,8 @@ Workflow for agents: `.cursor/skills/incident-report/SKILL.md`.
 
 - Default sample scene: `lua/scenes/default.json` (legacy rows may omit `id`; saves emit `id` for round-trip).
 - Bridge: `src/webview_host_mac.mm` (macOS), stub elsewhere.
-- Behaviors: `src/engine/lua/script_host.`*, web `reloadBehaviors` / `restartGame`.
+- Behaviors: `src/engine/lua/script_host.`\*, web `reloadBehaviors` / `restartGame`.
 
 ---
 
-*Update when goals or sample-vs-engine boundaries shift.*
+_Update when goals or sample-vs-engine boundaries shift._

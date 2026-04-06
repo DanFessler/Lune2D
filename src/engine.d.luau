@@ -55,6 +55,12 @@ declare app: {
 	quit: () -> (),
 }
 
+-- Toolbar / viewport tooling (native-driven).
+declare editor: {
+	playState: () -> "stopped" | "playing" | "paused",
+	getSelectedEntityId: () -> number,
+}
+
 -- Scene + script host API (game-facing facade).
 declare runtime: {
 	spawn: (name: string?) -> number,
@@ -69,6 +75,7 @@ declare runtime: {
 	setActive: (entityId: number, active: boolean) -> (),
 	getTransform: (entityId: number) -> TransformHandle,
 	getWorldTransform: (entityId: number) -> WorldTransform,
+	forEachEntityDrawOrder: ((entityId: number) -> ()) -> (),
 	registerBehavior: (name: string, desc: BehaviorDesc) -> (),
 	drawBehaviors: (totalTime: number) -> (),
 }

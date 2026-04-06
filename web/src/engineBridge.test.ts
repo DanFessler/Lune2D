@@ -29,7 +29,9 @@ describe("compareEntitySiblingOrder", () => {
     const a = ent("2", { drawOrder: 0 });
     const b = ent("10", { drawOrder: 0 });
     expect(compareEntitySiblingOrder(a, b)).toBeLessThan(0);
-    expect(compareEntitySiblingOrder(ent("1", { drawOrder: 1 }), a)).toBeGreaterThan(0);
+    expect(
+      compareEntitySiblingOrder(ent("1", { drawOrder: 1 }), a),
+    ).toBeGreaterThan(0);
   });
 });
 

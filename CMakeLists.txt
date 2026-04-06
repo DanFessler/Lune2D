@@ -38,6 +38,8 @@ FetchContent_MakeAvailable(luau nlohmann_json)
 add_executable(lune2d
     src/main.cpp
     src/scene.cpp
+    src/editor_state.cpp
+    src/editor_pick.cpp
     src/editor_bridge.cpp
     src/webview_viewport.cpp
     src/viewport_math.cpp
@@ -56,6 +58,7 @@ add_executable(lune2d
     src/engine/lua/lua_vm_lifecycle.cpp
     src/engine/lua/lua_require.cpp
     src/engine/lua/lua_api_register.cpp
+    src/engine/lua/lua_editor.cpp
     src/engine/lua/script_host.cpp
     src/engine/scene_loader.cpp
 )

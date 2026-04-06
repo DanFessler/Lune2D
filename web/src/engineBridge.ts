@@ -80,8 +80,7 @@ function normalizeEntity(row: unknown): EngineEntity | null {
       name: typeof r.name === "string" ? r.name : "Entity",
       active: r.active !== false,
       drawOrder: typeof r.drawOrder === "number" ? r.drawOrder : 0,
-      updateOrder:
-        typeof r.updateOrder === "number" ? r.updateOrder : 0,
+      updateOrder: typeof r.updateOrder === "number" ? r.updateOrder : 0,
       parentId:
         parentRaw === null || parentRaw === undefined
           ? undefined
@@ -135,8 +134,7 @@ export function hierarchyLayoutSignature(entities: EngineEntity[]): string {
   return [...entities]
     .sort((a, b) => Number(a.id) - Number(b.id))
     .map(
-      (e) =>
-        `${e.id}\t${e.parentId ?? ""}\t${e.drawOrder}\t${e.updateOrder}`,
+      (e) => `${e.id}\t${e.parentId ?? ""}\t${e.drawOrder}\t${e.updateOrder}`,
     )
     .join("\n");
 }
@@ -164,7 +162,8 @@ export function applyOptimisticHierarchyDrop(
 
   if (side === "top" || side === "bottom") {
     const parentRaw = targetEntity.parentId;
-    const parentStr = parentRaw === undefined || parentRaw === null ? null : String(parentRaw);
+    const parentStr =
+      parentRaw === undefined || parentRaw === null ? null : String(parentRaw);
     patch(activeId, (e) => {
       e.parentId = parentStr === null ? undefined : parentStr;
     });
@@ -223,14 +222,15 @@ function childIsReachableAscendingFromParent(
     seen.add(cur);
     const ent = byId.get(cur);
     const next = ent?.parentId;
-    cur =
-      next && next !== cur ? String(next) : undefined;
+    cur = next && next !== cur ? String(next) : undefined;
   }
   return false;
 }
 
 /** Build a forest from optional parentId links; orphans, missing parents, and cycles break to roots. */
-export function buildEntityHierarchy(entities: EngineEntity[]): HierarchyEntity[] {
+export function buildEntityHierarchy(
+  entities: EngineEntity[],
+): HierarchyEntity[] {
   const byId = new Map(entities.map((e) => [e.id, e]));
   const nodes = new Map<string, HierarchyEntity>();
   for (const e of entities) {
@@ -267,6 +267,8 @@ export function buildEntityHierarchy(entities: EngineEntity[]): HierarchyEntity[
 declare global {
   interface Window {
     __engineOnEntities?: (payload: EngineEntity[]) => void;
+    /** Native viewport pick: sync hierarchy/inspector selection. */
+    __engineSelectEntity?: (id: number | string | null) => void;
   }
 }
 

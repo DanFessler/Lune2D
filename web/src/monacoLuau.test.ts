@@ -43,15 +43,18 @@ describe("registerLuauEditorFeatures", () => {
   it("registers a completion provider with engine API members", async () => {
     const monaco = fakeMonaco();
     registerLuauEditorFeatures(monaco as never);
-    const call = monaco.languages.registerCompletionItemProvider.mock.calls.find(
-      (c) => c[0] === "luau",
-    );
+    const call =
+      monaco.languages.registerCompletionItemProvider.mock.calls.find(
+        (c) => c[0] === "luau",
+      );
     expect(call).toBeTruthy();
     const provider = call![1] as {
       provideCompletionItems: (
         model: { getWordUntilPosition: () => { word: string } },
         position: unknown,
-      ) => Promise<{ suggestions: { label: string }[] }> | { suggestions: { label: string }[] };
+      ) =>
+        | Promise<{ suggestions: { label: string }[] }>
+        | { suggestions: { label: string }[] };
     };
     const model = {
       getWordUntilPosition: () => ({ word: "draw" }),

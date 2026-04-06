@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { RgbaColorPicker } from "react-colorful";
 import type { RgbaColor } from "react-colorful";
@@ -34,7 +42,9 @@ function parseBehaviorColor(value: unknown): [number, number, number, number] {
   if (!Array.isArray(value) || value.length < 3) return [255, 255, 255, 255];
   const ch = (i: number, fallback: number) => {
     const x = Number(value[i]);
-    return Number.isFinite(x) ? Math.max(0, Math.min(255, Math.round(x))) : fallback;
+    return Number.isFinite(x)
+      ? Math.max(0, Math.min(255, Math.round(x)))
+      : fallback;
   };
   const a = value.length >= 4 ? ch(3, 255) : 255;
   return [ch(0, 255), ch(1, 255), ch(2, 255), a];
@@ -119,14 +129,19 @@ function CollapsibleBlock({
             className={styles.removeBtn}
             aria-label={`Remove ${name}`}
             onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
           >
             <FaTimes />
           </button>
         ) : null}
         <div className={styles.arrowContainer}>{isCollapsed ? "▶" : "▼"}</div>
       </div>
-      {!isCollapsed ? <div className={styles.behaviorContent}>{children}</div> : null}
+      {!isCollapsed ? (
+        <div className={styles.behaviorContent}>{children}</div>
+      ) : null}
     </div>
   );
 }
@@ -219,18 +234,34 @@ function EditableFloat({
 }
 
 function BehaviorBoolRow({
-  entityId, scriptIndex, field, value,
-}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  entityId,
+  scriptIndex,
+  field,
+  value,
+}: {
+  entityId: number;
+  scriptIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
   const checked = value === true || value === "true";
   return (
     <>
       <span className={styles.fieldLabel}>{field.name}</span>
-      <label className={`${styles.fieldInput} ${styles.fieldSpan2}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <label
+        className={`${styles.fieldInput} ${styles.fieldSpan2}`}
+        style={{ display: "flex", alignItems: "center", gap: 8 }}
+      >
         <input
           type="checkbox"
           checked={checked}
           onChange={(e) => {
-            void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, e.target.checked);
+            void engine.runtime.setScriptProperty(
+              entityId,
+              scriptIndex,
+              field.name,
+              e.target.checked,
+            );
           }}
         />
       </label>
@@ -260,8 +291,16 @@ function clampColorPopoverPosition(
 }
 
 function BehaviorColorRow({
-  entityId, scriptIndex, field, value,
-}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  entityId,
+  scriptIndex,
+  field,
+  value,
+}: {
+  entityId: number;
+  scriptIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
   const [r, g, b, a255] = parseBehaviorColor(value);
   const fromProps: RgbaColor = useMemo(
     () => ({ r, g, b, a: a255 / 255 }),
@@ -375,7 +414,9 @@ function BehaviorColorRow({
 
   return (
     <>
-      <span className={styles.fieldLabel} title={field.name}>{field.name}</span>
+      <span className={styles.fieldLabel} title={field.name}>
+        {field.name}
+      </span>
       <div className={styles.colorPopoverWrap} ref={wrapRef}>
         <button
           type="button"
@@ -401,8 +442,16 @@ function BehaviorColorRow({
 }
 
 function BehaviorNumberRow({
-  entityId, scriptIndex, field, value,
-}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  entityId,
+  scriptIndex,
+  field,
+  value,
+}: {
+  entityId: number;
+  scriptIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
   const n = typeof value === "number" ? value : Number(value);
   const base = Number.isFinite(n) ? n : 0;
   const [local, setLocal] = useState(String(base));
@@ -443,11 +492,16 @@ function BehaviorNumberRow({
     const max = field.max as number;
     const parsed = parseFloat(local);
     const safe = Number.isFinite(parsed)
-      ? Math.min(max, Math.max(min, field.type === "integer" ? Math.round(parsed) : parsed))
+      ? Math.min(
+          max,
+          Math.max(min, field.type === "integer" ? Math.round(parsed) : parsed),
+        )
       : min;
     return (
       <>
-        <span className={styles.fieldLabel} title={field.name}>{field.name}</span>
+        <span className={styles.fieldLabel} title={field.name}>
+          {field.name}
+        </span>
         <input
           type="range"
           className={styles.fieldRange}
@@ -473,7 +527,9 @@ function BehaviorNumberRow({
 
   return (
     <>
-      <span className={styles.fieldLabel} title={field.name}>{field.name}</span>
+      <span className={styles.fieldLabel} title={field.name}>
+        {field.name}
+      </span>
       <input
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         type="number"
@@ -487,8 +543,16 @@ function BehaviorNumberRow({
 }
 
 function BehaviorEnumRow({
-  entityId, scriptIndex, field, value,
-}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  entityId,
+  scriptIndex,
+  field,
+  value,
+}: {
+  entityId: number;
+  scriptIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
   const opts = field.enumOptions!;
   const v = typeof value === "string" ? value : String(value ?? opts[0]);
   return (
@@ -498,11 +562,18 @@ function BehaviorEnumRow({
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         value={v}
         onChange={(e) => {
-          void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, e.target.value);
+          void engine.runtime.setScriptProperty(
+            entityId,
+            scriptIndex,
+            field.name,
+            e.target.value,
+          );
         }}
       >
         {opts.map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
         ))}
       </select>
     </>
@@ -510,15 +581,32 @@ function BehaviorEnumRow({
 }
 
 function BehaviorStringRow({
-  entityId, scriptIndex, field, value,
-}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
-  const v = typeof value === "string" ? value : value == null ? "" : String(value);
+  entityId,
+  scriptIndex,
+  field,
+  value,
+}: {
+  entityId: number;
+  scriptIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
+  const v =
+    typeof value === "string" ? value : value == null ? "" : String(value);
   const [local, setLocal] = useState(v);
   useEffect(() => {
-    setLocal(typeof value === "string" ? value : value == null ? "" : String(value));
+    setLocal(
+      typeof value === "string" ? value : value == null ? "" : String(value),
+    );
   }, [value, field.name]);
   const commit = () => {
-    if (local !== v) void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, local);
+    if (local !== v)
+      void engine.runtime.setScriptProperty(
+        entityId,
+        scriptIndex,
+        field.name,
+        local,
+      );
   };
   return (
     <>
@@ -536,11 +624,21 @@ function BehaviorStringRow({
 }
 
 function BehaviorJsonRow({
-  entityId, scriptIndex, field, value,
-}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  entityId,
+  scriptIndex,
+  field,
+  value,
+}: {
+  entityId: number;
+  scriptIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
   const raw = (() => {
     try {
-      return typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+      return typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value ?? "");
     } catch {
       return "";
     }
@@ -548,7 +646,9 @@ function BehaviorJsonRow({
   const [local, setLocal] = useState(raw);
   useEffect(() => {
     try {
-      setLocal(typeof value === "object" ? JSON.stringify(value) : String(value ?? ""));
+      setLocal(
+        typeof value === "object" ? JSON.stringify(value) : String(value ?? ""),
+      );
     } catch {
       setLocal("");
     }
@@ -558,13 +658,23 @@ function BehaviorJsonRow({
     if (t === "object" || t === "vector") {
       try {
         const parsed = JSON.parse(local) as unknown;
-        void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, parsed as never);
+        void engine.runtime.setScriptProperty(
+          entityId,
+          scriptIndex,
+          field.name,
+          parsed as never,
+        );
       } catch {
         setLocal(raw);
       }
       return;
     }
-    void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, local);
+    void engine.runtime.setScriptProperty(
+      entityId,
+      scriptIndex,
+      field.name,
+      local,
+    );
   };
   return (
     <>
@@ -589,11 +699,17 @@ function BehaviorPropertyRow(props: {
 }) {
   const { field } = props;
   if (field.type === "boolean") return <BehaviorBoolRow {...props} />;
-  if (field.type === "number" || field.type === "integer") return <BehaviorNumberRow {...props} />;
+  if (field.type === "number" || field.type === "integer")
+    return <BehaviorNumberRow {...props} />;
   if (field.type === "color") return <BehaviorColorRow {...props} />;
-  if (field.type === "enum" && field.enumOptions && field.enumOptions.length > 0)
+  if (
+    field.type === "enum" &&
+    field.enumOptions &&
+    field.enumOptions.length > 0
+  )
     return <BehaviorEnumRow {...props} />;
-  if (field.type === "string" || field.type === "asset") return <BehaviorStringRow {...props} />;
+  if (field.type === "string" || field.type === "asset")
+    return <BehaviorStringRow {...props} />;
   return <BehaviorJsonRow {...props} />;
 }
 
@@ -624,19 +740,41 @@ function BehaviorPropertyEditor({
   );
 }
 
-function TransformFields({ t, entityId }: { t: TransformComponent; entityId: number }) {
+function TransformFields({
+  t,
+  entityId,
+}: {
+  t: TransformComponent;
+  entityId: number;
+}) {
   const set = (field: string) => (v: number) =>
     engine.runtime.setTransform(entityId, field, v);
   return (
     <>
-      <EditableVec2 label="Position" x={t.x} y={t.y} onCommitX={set("x")} onCommitY={set("y")} />
+      <EditableVec2
+        label="Position"
+        x={t.x}
+        y={t.y}
+        onCommitX={set("x")}
+        onCommitY={set("y")}
+      />
       <EditableFloat label="Angle" value={t.angle} onCommit={set("angle")} />
-      <EditableVec2 label="Velocity" x={t.vx} y={t.vy} onCommitX={set("vx")} onCommitY={set("vy")} />
+      <EditableVec2
+        label="Velocity"
+        x={t.vx}
+        y={t.vy}
+        onCommitX={set("vx")}
+        onCommitY={set("vy")}
+      />
     </>
   );
 }
 
-function ScriptList({ entity, collapseMap, onFold }: {
+function ScriptList({
+  entity,
+  collapseMap,
+  onFold,
+}: {
   entity: EngineEntity;
   collapseMap: Record<string, boolean>;
   onFold: (key: string, collapsed: boolean) => void;
@@ -686,10 +824,19 @@ function ScriptList({ entity, collapseMap, onFold }: {
           const key = `script:${i}:${sc.comp.behavior}`;
           const propertyBody =
             sc.comp.propertySchema && sc.comp.propertySchema.length > 0 ? (
-              <BehaviorPropertyEditor entityId={entityId} scriptIndex={i} comp={sc.comp} />
+              <BehaviorPropertyEditor
+                entityId={entityId}
+                scriptIndex={i}
+                comp={sc.comp}
+              />
             ) : (
-              <span className={styles.fieldLabel} style={{ gridColumn: "1 / -1" }}>
-                Luau behavior (add <code>properties = defineProperties {"{ ... }"}</code> to expose fields)
+              <span
+                className={styles.fieldLabel}
+                style={{ gridColumn: "1 / -1" }}
+              >
+                Luau behavior (add{" "}
+                <code>properties = defineProperties {"{ ... }"}</code> to expose
+                fields)
               </span>
             );
           const dragOverlay = (
@@ -840,7 +987,11 @@ export default function EngineInspector({
             <TransformFields t={transform} entityId={entityId} />
           </CollapsibleBlock>
         ) : null}
-        <ScriptList entity={entity} collapseMap={collapseMap} onFold={handleFold} />
+        <ScriptList
+          entity={entity}
+          collapseMap={collapseMap}
+          onFold={handleFold}
+        />
       </div>
     </div>
   );
