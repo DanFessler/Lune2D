@@ -1,9 +1,12 @@
 #include "editor_bridge.hpp"
+#include "engine/lua/behavior_schema.hpp"
 #include "scene.hpp"
 #include "webview_host.hpp"
 
 #include <cstdio>
 #include <string>
+
+#include <nlohmann/json.hpp>
 
 namespace {
 
@@ -40,9 +43,16 @@ void appendTransformComponent(std::string& json, const Transform& t) {
 }
 
 void appendScriptComponent(std::string& json, const ScriptInstance& s) {
-    json += "{\"type\":\"Script\",\"behavior\":";
-    appendJsonEscaped(json, s.behavior.c_str());
-    json += '}';
+    nlohmann::json row   = nlohmann::json::object();
+    row["type"]          = "Script";
+    row["behavior"]      = s.behavior;
+    row["properties"]    = s.propertyOverrides;
+    row["propertyValues"] =
+        eng_behavior_merge_properties(s.behavior.c_str(), s.propertyOverrides);
+    nlohmann::json sch = eng_behavior_schema_to_editor_json(s.behavior.c_str());
+    if (!sch.is_null())
+        row["propertySchema"] = std::move(sch);
+    json += row.dump();
 }
 
 } // namespace

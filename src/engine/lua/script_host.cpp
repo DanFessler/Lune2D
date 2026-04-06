@@ -12,9 +12,11 @@
 #include <iterator>
 #include <sys/stat.h>
 
+#include "behavior_schema.hpp"
 #include "engine/constants.hpp"
 #include "engine/engine.hpp"
 #include "lua_api_register.hpp"
+#include "scene.hpp"
 
 std::time_t eng_file_mtime(const std::string& path) {
     struct stat st;
@@ -95,6 +97,7 @@ static void eng_load_behaviors(lua_State* L, const std::string& behaviorsDir) {
             continue;
         }
 
+        eng_behavior_schema_register_from_module(L, name.c_str(), -1);
         lua_setfield(L, -2, name.c_str());
 
         // Also cache in package.loaded so require("behaviors/Foo") won't re-run
@@ -123,8 +126,36 @@ static const char kUnloadBehaviorModules[] =
 
 } // namespace
 
+static void eng_prime_behavior_property_globals(lua_State* L) {
+    static const char kChunk[] =
+        "local m = require(\"game/behavior_props\")\n"
+        "defineProperties = m.defineProperties\n"
+        "prop = m.prop\n";
+
+    size_t bytecodeSize = 0;
+    char*  bytecode =
+        luau_compile(kChunk, sizeof(kChunk) - 1, nullptr, &bytecodeSize);
+    if (!bytecode) {
+        SDL_Log("eng_prime_behavior_property_globals: compile OOM");
+        return;
+    }
+    int loadResult = luau_load(L, "=game/behavior_props_bootstrap", bytecode, bytecodeSize, 0);
+    free(bytecode);
+    if (loadResult != LUA_OK) {
+        SDL_Log("eng_prime_behavior_property_globals: load error: %s", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return;
+    }
+    if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+        SDL_Log("eng_prime_behavior_property_globals: run error: %s", lua_tostring(L, -1));
+        lua_pop(L, 1);
+    }
+}
+
 void eng_reload_behaviors(lua_State* L, const std::string& luaBaseDir) {
     g_registered_behaviors.clear();
+    eng_behavior_schema_clear();
+    g_scene.releaseAllScriptLuaRefs(L);
 
     size_t bytecodeSize = 0;
     char*  bytecode     = luau_compile(kUnloadBehaviorModules,
@@ -178,6 +209,8 @@ lua_State* eng_create_lua_vm(const std::string& luaBaseDir) {
     lua_setfield(L, -2, "basepath");
     lua_setglobal(L, "package");
 
+    eng_behavior_schema_clear();
+    eng_prime_behavior_property_globals(L);
     eng_load_behaviors(L, baseDir + "behaviors/");
 
     return L;

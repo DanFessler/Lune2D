@@ -12,6 +12,7 @@
 #include "engine/constants.hpp"
 #include "engine/engine.hpp"
 #include "engine/lua/lua_runtime.hpp"
+#include "engine/lua/lua_vm_lifecycle.hpp"
 #include "engine/lua/script_host.hpp"
 #include "engine/platform_paths.hpp"
 #include "engine/scene_loader.hpp"
@@ -131,7 +132,7 @@ int main(int argc, char* argv[]) {
         SDL_Quit();
         return 1;
     }
-    SDL_SetRenderVSync(g_eng.renderer, 0);
+    SDL_SetRenderVSync(g_eng.renderer, 1);
     g_eng.audio.init();
 
     webview_host_set_game_rect_callback(on_web_game_rect, nullptr);
@@ -156,6 +157,8 @@ int main(int argc, char* argv[]) {
         SDL_Quit();
         return 1;
     }
+
+    eng_lua_bind_main_vm(L);
 
     s_lua_for_behaviors_reload = L;
     webview_host_set_behaviors_reload_fn(reload_behaviors_from_web_ui);
@@ -227,13 +230,19 @@ int main(int argc, char* argv[]) {
             if (newL) {
                 lua_close(L);
                 L                          = newL;
+                eng_lua_bind_main_vm(L);
                 s_lua_for_behaviors_reload = L;
                 s_script_paused.store(false, std::memory_order_relaxed);
                 if (s_have_scene_snapshot_before_play) {
                     g_scene = s_scene_snapshot_before_play;
                     g_scene.resetScriptStartedFlags();
                     s_have_scene_snapshot_before_play = false;
+                    // Snapshot may carry registry indices from the closed VM — invalidate before dispatch.
+                    eng_on_lua_vm_replaced(g_scene);
                 } else {
+                    // `load_default_scene` calls `clear()` which would lua_unref on the new VM if refs
+                    // were still set from the old VM.
+                    eng_on_lua_vm_replaced(g_scene);
                     load_default_scene_file_into_g_scene();
                 }
                 SDL_Log("Engine restarted (editor)");

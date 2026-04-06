@@ -61,7 +61,8 @@ declare runtime: {
 	destroy: (id: number) -> (),
 	clear: () -> (),
 	loadScene: (path: string) -> (),
-	addScript: (entityId: number, behaviorName: string) -> (),
+	addScript: (entityId: number, behaviorName: string, properties: { [string]: any }?) -> (),
+	setScriptProperty: (entityId: number, scriptIndex: number, key: string, value: any?) -> (),
 	setDrawOrder: (entityId: number, order: number) -> (),
 	setUpdateOrder: (entityId: number, order: number) -> (),
 	setName: (entityId: number, name: string) -> (),
@@ -72,10 +73,30 @@ declare runtime: {
 	drawBehaviors: (totalTime: number) -> (),
 }
 
+export type BehaviorSelf = {
+	entityId: number,
+}
+
 export type BehaviorDesc = {
-	start: ((entityId: number) -> ())?,
-	update: ((entityId: number, dt: number) -> ())?,
-	draw: ((entityId: number, totalTime: number) -> ())?,
-	keydown: ((entityId: number, key: string) -> ())?,
-	onHudPlay: ((entityId: number) -> ())?,
+	-- Optional schema table from defineProperties { ... } (see game/behavior_props).
+	properties: any?,
+	start: ((BehaviorSelf) -> ())?,
+	update: ((BehaviorSelf, dt: number) -> ())?,
+	draw: ((BehaviorSelf, totalTime: number) -> ())?,
+	keydown: ((BehaviorSelf, key: string) -> ())?,
+	onHudPlay: ((BehaviorSelf) -> ())?,
+}
+
+-- Set by the VM before behaviors load; behaviors may use without require.
+declare defineProperties: (t: { [string]: any }) -> any
+declare prop: {
+	number: (default: number, meta: { min: number?, max: number? }?) -> any,
+	integer: (default: number, meta: { min: number?, max: number? }?) -> any,
+	string: (default: string) -> any,
+	boolean: (default: boolean) -> any,
+	enum: (default: string, options: { string }) -> any,
+	object: (default: any?) -> any,
+	asset: (default: string?) -> any,
+	color: (r: number, g: number, b: number, a: number?) -> any,
+	vector: (x: number, y: number) -> any,
 }

@@ -48,6 +48,21 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 - **Native** — After C++/mm changes, `cmake --build`.
 - **Lua** — Preserve `--!strict` and `require` layout under `lua/` for the **current sample**; new games can add parallel trees if needed.
 
+## Hard bugs and incident reports
+
+When a bug was **non-obvious** (wrong leads, cross-layer confusion, misleading errors, high debugging cost), document it:
+
+- **Full narrative** — New file under `docs/incidents/` from `docs/incidents/TEMPLATE.md` (see `docs/incidents/README.md`).
+- **Durable one-liners for agents** — Add sparingly to `docs/agent-pitfalls.md` with a link to the incident.
+- **Refactor follow-up** — If structure should change, add an ordered **plan** under `docs/plans/` and link it from the incident; treat implementation as separate work unless explicitly requested.
+
+Workflow for agents: `.cursor/skills/incident-report/SKILL.md`.
+
+## Native host / Luau VM lifetime
+
+- **`ScriptInstance.luaInstanceRef`** (and **`scriptVmGen`**) are valid only for the **current** main behavior VM. A scene **value copy** (snapshot, assignment) duplicates integers, not the registry they came from.
+- After a **full VM replacement** (`lua_close` + new `lua_State` for behaviors), call **`eng_on_lua_vm_replaced(g_scene)`** once the global VM pointer is updated and before running behavior dispatch, or ensure all behavior refs are cleared. Same-VM **hot reload** uses **`eng_reload_behaviors`** / `releaseAllScriptLuaRefs` instead (no generation bump).
+
 ## Further pointers
 
 - Default sample scene: `lua/scenes/default.json` (legacy rows may omit `id`; saves emit `id` for round-trip).

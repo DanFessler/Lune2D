@@ -51,6 +51,9 @@ add_executable(lune2d
     src/engine/lua/lua_app.cpp
     src/engine/lua/lua_transform.cpp
     src/engine/lua/lua_runtime.cpp
+    src/engine/lua/behavior_schema.cpp
+    src/engine/lua/behavior_instance.cpp
+    src/engine/lua/lua_vm_lifecycle.cpp
     src/engine/lua/lua_require.cpp
     src/engine/lua/lua_api_register.cpp
     src/engine/lua/script_host.cpp

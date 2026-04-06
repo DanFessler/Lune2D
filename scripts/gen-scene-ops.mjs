@@ -13,7 +13,12 @@ const outPath = resolve(__dirname, "../web/src/generated/sceneOps.ts");
 
 const ops = JSON.parse(readFileSync(manifestPath, "utf-8"));
 
-const tsTypeMap = { string: "string", number: "number", boolean: "boolean" };
+const tsTypeMap = {
+  string: "string",
+  number: "number",
+  boolean: "boolean",
+  any: "unknown",
+};
 
 function tsType(t) {
   return tsTypeMap[t] ?? "unknown";

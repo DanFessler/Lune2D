@@ -19,12 +19,18 @@ local function startGame()
 end
 
 return {
-	start = function(_id: number)
+	properties = defineProperties {
+		showFps = true,
+		scoreScale = prop.number(2.5, { min = 1, max = 6 }),
+		livesIconScale = prop.number(1, { min = 0.5, max = 2 }),
+	},
+
+	start = function(_self)
 		fps = 0
 		fpsFrames = 0
 		fpsAccum = 0
 	end,
-	update = function(_id: number, dt: number)
+	update = function(_self, dt: number)
 		fpsAccum += dt
 		fpsFrames += 1
 		if fpsAccum >= 0.5 then
@@ -33,14 +39,19 @@ return {
 			fpsAccum = 0
 		end
 	end,
-	draw = function(_id: number, _totalTime: number)
+	draw = function(self, _totalTime: number)
 		local W, H = screen.w, screen.h
+		local scoreSc = self.scoreScale :: number
+		local lifeSc = self.livesIconScale :: number
 
-		draw.number(session.score, 16, 16, 2.5, 255, 255, 255, 255)
+		draw.number(session.score, 16, 16, scoreSc, 255, 255, 255, 255)
 
 		local ship = session.ship
+		local lifeStep = 28 * lifeSc
+		local lifeX0 = W - 30 * lifeSc
+		local lifeY = 20
 		for i = 1, ship.lives do
-			draw.poly(C.MINI_SHIP, W - 30 - (i - 1) * 28, 20, 270, 255, 255, 255, 255)
+			draw.poly(C.MINI_SHIP, lifeX0 - (i - 1) * lifeStep, lifeY, 270, 255, 255, 255, 255)
 		end
 
 		if session.state == "title" then
@@ -88,16 +99,18 @@ return {
 			draw.number(session.wave, wtx + #wt * 8 * 3 + 8, H / 2 - 30, 3, 100, 255, 140, 255)
 		end
 
-		draw.number(fps, 16, H - 22, 1.2, 80, 80, 80, 255)
+		if self.showFps then
+			draw.number(fps, 16, H - 22, 1.2, 80, 80, 80, 255)
+		end
 	end,
-	keydown = function(_id: number, key: string)
+	keydown = function(_self, key: string)
 		if key == "space" and session.state == "title" then
 			startGame()
 		elseif key == "r" and session.state == "gameover" then
 			runtime.loadScene("scenes/default.json")
 		end
 	end,
-	onHudPlay = function(_id: number)
+	onHudPlay = function(_self)
 		startGame()
 	end,
 }

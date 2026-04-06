@@ -6,7 +6,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "engine/math.hpp"
+
+struct lua_State;
 
 struct Transform {
     float x = 0, y = 0, angle = 0, vx = 0, vy = 0;
@@ -14,8 +18,13 @@ struct Transform {
 };
 
 struct ScriptInstance {
-    std::string behavior;
-    bool        started = false;
+    std::string           behavior;
+    bool                  started = false;
+    nlohmann::json        propertyOverrides = nlohmann::json::object();
+    /// Luau registry ref for behavior `self` table; LUA_NOREF == -1 when unset.
+    /// Valid together with `scriptVmGen` only for that VM generation (`eng_lua_vm_generation`).
+    int      luaInstanceRef = -1;
+    uint32_t scriptVmGen    = 0;
 };
 
 struct Entity {
@@ -40,7 +49,8 @@ public:
     Entity*       entity(uint32_t id);
     const Entity* entity(uint32_t id) const;
 
-    bool addScript(uint32_t entityId, const char* behaviorName);
+    bool addScript(uint32_t entityId, const char* behaviorName,
+                   const nlohmann::json& propertyOverrides = nlohmann::json::object());
     bool removeScript(uint32_t entityId, int index);
     bool reorderScript(uint32_t entityId, int fromIndex, int toIndex);
     void setDrawOrder(uint32_t entityId, int order);
@@ -53,6 +63,13 @@ public:
 
     /// After a VM reset, Luau will call `start` again — clear native "already started" flags.
     void resetScriptStartedFlags();
+
+    /// Drops pinned Luau `self` tables for every script (e.g. before behavior hot-reload).
+    void releaseAllScriptLuaRefs(lua_State* L);
+
+    /// Clears `luaInstanceRef` on every script without touching Luau (needed after `lua_close` or
+    /// when restoring a scene snapshot that still holds registry indices from an old VM).
+    void invalidateAllBehaviorLuaRefs();
 
     /// Stable iteration for tooling: sorted by entity id.
     std::vector<const Entity*> entitiesSortedById() const;

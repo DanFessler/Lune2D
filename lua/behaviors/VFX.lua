@@ -2,13 +2,13 @@
 local vfx = require("game/vfx")
 
 return {
-	start = function(_id: number)
+	start = function(_self)
 		vfx.clearVfx()
 	end,
-	update = function(_id: number, dt: number)
+	update = function(_self, dt: number)
 		vfx.updateParticles(dt)
 	end,
-	draw = function(_id: number, totalTime: number)
+	draw = function(_self, totalTime: number)
 		vfx.drawParticles(totalTime)
 	end,
 }

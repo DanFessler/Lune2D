@@ -5,6 +5,8 @@
 
 #include <fstream>
 
+#include "engine/lua/behavior_schema.hpp"
+
 using json = nlohmann::json;
 
 namespace {
@@ -39,6 +41,17 @@ void applyEntityJson(Scene& scene, uint32_t id, const json& ent) {
         for (const auto& s : ent["scripts"]) {
             if (s.is_string())
                 scene.addScript(id, s.get<std::string>().c_str());
+            else if (s.is_object()) {
+                if (!s.contains("behavior") || !s["behavior"].is_string()) {
+                    SDL_Log("eng_load_scene: script object missing behavior string");
+                    continue;
+                }
+                std::string    beh = s["behavior"].get<std::string>();
+                json           o   = s.value("properties", json::object());
+                if (!o.is_object())
+                    o = json::object();
+                scene.addScript(id, beh.c_str(), o);
+            }
         }
     }
 }
@@ -135,8 +148,17 @@ bool eng_save_scene(const Scene& scene, const std::string& jsonPath) {
         tf["sy"]    = e.transform.sy;
         ent["transform"] = tf;
         json scripts = json::array();
-        for (const auto& s : e.scripts)
-            scripts.push_back(s.behavior);
+        for (const auto& s : e.scripts) {
+            json saveProps = eng_behavior_overrides_for_save(s.behavior.c_str(), s.propertyOverrides);
+            if (saveProps.empty())
+                scripts.push_back(s.behavior);
+            else {
+                json slot;
+                slot["behavior"]   = s.behavior;
+                slot["properties"] = saveProps;
+                scripts.push_back(slot);
+            }
+        }
         ent["scripts"] = scripts;
         arr.push_back(ent);
     }

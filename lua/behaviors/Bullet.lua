@@ -9,8 +9,13 @@ local function destroyBullet(id: number)
 end
 
 return {
-	start = function(_id: number) end,
-	update = function(entityId: number, dt: number)
+	properties = defineProperties {
+		tint = prop.color(0, 220, 255, 255),
+	},
+
+	start = function(_self) end,
+	update = function(self, dt: number)
+		local entityId = self.entityId
 		local st = session.state
 		if st == "title" or st == "gameover" then
 			return
@@ -27,11 +32,13 @@ return {
 		local t = runtime.getTransform(entityId)
 		t.x, t.y = D.wrap(t.x + t.vx * dt, t.y + t.vy * dt)
 	end,
-	draw = function(entityId: number, _t: number)
+	draw = function(self, _t: number)
+		local entityId = self.entityId
 		local ex = session.bullets[entityId]
 		if not ex or ex.dead then
 			return
 		end
-		D.drawCircleWrapped(0, 0, C.BULLET_RADIUS, 0, 220, 255, 255)
+		local c = self.tint :: { number }
+		D.drawCircleWrapped(0, 0, C.BULLET_RADIUS, c[1], c[2], c[3], c[4] or 255)
 	end,
 }

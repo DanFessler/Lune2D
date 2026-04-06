@@ -3,8 +3,14 @@ local session = require("game/session")
 local D = require("game/draw_util")
 
 return {
-	start = function(_id: number) end,
-	update = function(entityId: number, dt: number)
+	properties = defineProperties {
+		tint = prop.color(255, 255, 255, 255),
+		rotationMultiplier = prop.number(1, { min = -3, max = 3 }),
+	},
+
+	start = function(_self) end,
+	update = function(self, dt: number)
+		local entityId = self.entityId
 		local st = session.state
 		if st == "title" or st == "gameover" then
 			return
@@ -15,13 +21,15 @@ return {
 		end
 		local t = runtime.getTransform(entityId)
 		t.x, t.y = D.wrap(t.x + t.vx * dt, t.y + t.vy * dt)
-		t.angle += a.rotSpeed * dt
+		t.angle += a.rotSpeed * self.rotationMultiplier * dt
 	end,
-	draw = function(entityId: number, _t: number)
+	draw = function(self, _t: number)
+		local entityId = self.entityId
 		local a = session.asteroids[entityId]
 		if not a or a.dead then
 			return
 		end
-		D.drawPolyWrapped(a.shape, 0, 0, 0, 255, 255, 255, 255)
+		local c = self.tint :: { number }
+		D.drawPolyWrapped(a.shape, 0, 0, 0, c[1], c[2], c[3], c[4] or 255)
 	end,
 }

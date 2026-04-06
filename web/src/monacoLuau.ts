@@ -32,6 +32,7 @@ const ENGINE_COMPLETION_LABELS: string[] = [
   "runtime.clear",
   "runtime.loadScene",
   "runtime.addScript",
+  "runtime.setScriptProperty",
   "runtime.removeScript",
   "runtime.reorderScript",
   "runtime.setDrawOrder",
@@ -44,6 +45,16 @@ const ENGINE_COMPLETION_LABELS: string[] = [
   "runtime.getTransform",
   "runtime.registerBehavior",
   "runtime.drawBehaviors",
+  "defineProperties",
+  "prop.number",
+  "prop.integer",
+  "prop.string",
+  "prop.boolean",
+  "prop.enum",
+  "prop.object",
+  "prop.asset",
+  "prop.color",
+  "prop.vector",
 ];
 
 export function registerLuauEditorFeatures(monaco: typeof Monaco): void {

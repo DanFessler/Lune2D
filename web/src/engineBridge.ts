@@ -7,9 +7,24 @@ export type TransformComponent = {
   vy: number;
 };
 
+/** Behavior property field metadata (from native schema). */
+export type BehaviorPropertyField = {
+  name: string;
+  type: string;
+  default?: unknown;
+  min?: number;
+  max?: number;
+  enumOptions?: string[];
+};
+
 export type ScriptComponent = {
   type: "Script";
   behavior: string;
+  /** Serialized per-instance overrides only (may be empty). */
+  properties?: Record<string, unknown>;
+  /** Merged values (defaults + overrides) for editor display. */
+  propertyValues?: Record<string, unknown>;
+  propertySchema?: BehaviorPropertyField[];
 };
 
 export type EngineComponent = TransformComponent | ScriptComponent;

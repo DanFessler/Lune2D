@@ -6,11 +6,57 @@
 
 #include <SDL3/SDL.h>
 
+#include <nlohmann/json.hpp>
+
+#include "behavior_instance.hpp"
+#include "behavior_schema.hpp" // eng_behavior_lua_number_to_json
 #include "engine/engine.hpp"
 #include "engine/immediate_draw.hpp"
 #include "engine/scene_loader.hpp"
 #include "lua_transform.hpp"
 #include "scene.hpp"
+
+lua_State* g_eng_lua_vm = nullptr;
+
+void eng_lua_bind_main_vm(lua_State* L) {
+    g_eng_lua_vm = L;
+}
+
+bool eng_scene_mut_set_script_property(lua_State* L, uint32_t entityId, int scriptIndex,
+                                       const char* key, bool erase,
+                                       const nlohmann::json& value) {
+    Entity* e = g_scene.entity(entityId);
+    if (!e || scriptIndex < 0 || scriptIndex >= (int)e->scripts.size() || !key)
+        return false;
+    ScriptInstance& sc = e->scripts[scriptIndex];
+    if (erase)
+        sc.propertyOverrides.erase(key);
+    else
+        sc.propertyOverrides[key] = value;
+    eng_behavior_release_script_self(L, sc);
+    return true;
+}
+
+static nlohmann::json luaTableToJsonObject(lua_State* L, int idx) {
+    nlohmann::json o    = nlohmann::json::object();
+    int                t = lua_absindex(L, idx);
+    lua_pushnil(L);
+    while (lua_next(L, t) != 0) {
+        if (lua_type(L, -2) == LUA_TSTRING) {
+            const char* k = lua_tostring(L, -2);
+            if (lua_isboolean(L, -1))
+                o[k] = lua_toboolean(L, -1) != 0;
+            else if (lua_type(L, -1) == LUA_TNUMBER)
+                o[k] = eng_behavior_lua_number_to_json(L, -1);
+            else if (lua_isstring(L, -1))
+                o[k] = std::string(lua_tostring(L, -1));
+            else if (lua_isnil(L, -1))
+                o[k] = nullptr;
+        }
+        lua_pop(L, 1);
+    }
+    return o;
+}
 
 static int l_runtime_spawn(lua_State* L) {
     const char* name = luaL_optstring(L, 1, "Entity");
@@ -49,8 +95,34 @@ static int l_runtime_loadScene(lua_State* L) {
 static int l_runtime_addScript(lua_State* L) {
     uint32_t    id  = (uint32_t)luaL_checkinteger(L, 1);
     const char* beh = luaL_checkstring(L, 2);
-    if (!g_scene.addScript(id, beh))
+    nlohmann::json props = nlohmann::json::object();
+    if (lua_gettop(L) >= 3 && lua_istable(L, 3))
+        props = luaTableToJsonObject(L, 3);
+    if (!g_scene.addScript(id, beh, props))
         luaL_error(L, "addScript failed");
+    return 0;
+}
+
+static int l_runtime_setScriptProperty(lua_State* L) {
+    uint32_t    eid = (uint32_t)luaL_checkinteger(L, 1);
+    int         si  = (int)luaL_checkinteger(L, 2);
+    const char* key = luaL_checkstring(L, 3);
+    if (lua_gettop(L) < 4 || lua_isnil(L, 4)) {
+        if (!eng_scene_mut_set_script_property(L, eid, si, key, true, nlohmann::json()))
+            luaL_error(L, "setScriptProperty: bad entity or script index");
+        return 0;
+    }
+    nlohmann::json v;
+    if (lua_isboolean(L, 4))
+        v = lua_toboolean(L, 4) != 0;
+    else if (lua_type(L, 4) == LUA_TNUMBER)
+        v = eng_behavior_lua_number_to_json(L, 4);
+    else if (lua_isstring(L, 4))
+        v = std::string(lua_tostring(L, 4));
+    else
+        luaL_error(L, "setScriptProperty: value must be boolean, number, string, or nil");
+    if (!eng_scene_mut_set_script_property(L, eid, si, key, false, v))
+        luaL_error(L, "setScriptProperty: bad entity or script index");
     return 0;
 }
 
@@ -156,6 +228,7 @@ static int l_runtime_getWorldTransform(lua_State* L) {
 static int l_runtime_registerBehavior(lua_State* L) {
     const char* name = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TTABLE);
+    eng_behavior_schema_register_from_module(L, name, 2);
     lua_getglobal(L, "_BEHAVIORS");
     lua_pushvalue(L, 2);
     lua_setfield(L, -2, name);
@@ -192,7 +265,7 @@ void eng_scene_draw_lua_scripts(lua_State* L, Scene& scene, float totalTime) {
             }
             lua_getfield(L, -1, "draw");
             if (lua_isfunction(L, -1)) {
-                lua_pushnumber(L, (lua_Integer)e.id);
+                eng_behavior_push_script_self(L, sc, e.id);
                 lua_pushnumber(L, totalTime);
                 if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
                     SDL_Log("Lua %s.draw: %s", sc.behavior.c_str(), lua_tostring(L, -1));
@@ -231,7 +304,7 @@ void eng_scene_update_lua_scripts(lua_State* L, Scene& scene, float dt) {
             if (!sc.started) {
                 lua_getfield(L, -1, "start");
                 if (lua_isfunction(L, -1)) {
-                    lua_pushnumber(L, (lua_Integer)e.id);
+                    eng_behavior_push_script_self(L, sc, e.id);
                     if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
                         SDL_Log("Lua %s.start: %s", sc.behavior.c_str(), lua_tostring(L, -1));
                         lua_pop(L, 1);
@@ -242,7 +315,7 @@ void eng_scene_update_lua_scripts(lua_State* L, Scene& scene, float dt) {
             }
             lua_getfield(L, -1, "update");
             if (lua_isfunction(L, -1)) {
-                lua_pushnumber(L, (lua_Integer)e.id);
+                eng_behavior_push_script_self(L, sc, e.id);
                 lua_pushnumber(L, dt);
                 if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
                     SDL_Log("Lua %s.update: %s", sc.behavior.c_str(), lua_tostring(L, -1));
@@ -272,7 +345,7 @@ void eng_scene_keydown_lua_scripts(lua_State* L, Scene& scene, const char* key) 
             }
             lua_getfield(L, -1, "keydown");
             if (lua_isfunction(L, -1)) {
-                lua_pushnumber(L, (lua_Integer)e.id);
+                eng_behavior_push_script_self(L, sc, e.id);
                 lua_pushstring(L, key);
                 if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
                     SDL_Log("Lua %s.keydown: %s", sc.behavior.c_str(), lua_tostring(L, -1));
@@ -302,7 +375,7 @@ void eng_scene_hudplay_lua_scripts(lua_State* L, Scene& scene) {
             }
             lua_getfield(L, -1, "onHudPlay");
             if (lua_isfunction(L, -1)) {
-                lua_pushnumber(L, (lua_Integer)e.id);
+                eng_behavior_push_script_self(L, sc, e.id);
                 if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
                     SDL_Log("Lua %s.onHudPlay: %s", sc.behavior.c_str(), lua_tostring(L, -1));
                     lua_pop(L, 1);
@@ -326,6 +399,8 @@ void eng_lua_register_runtime(lua_State* L) {
     lua_setfield(L, -2, "loadScene");
     lua_pushcfunction(L, l_runtime_addScript, "runtime.addScript");
     lua_setfield(L, -2, "addScript");
+    lua_pushcfunction(L, l_runtime_setScriptProperty, "runtime.setScriptProperty");
+    lua_setfield(L, -2, "setScriptProperty");
     lua_pushcfunction(L, l_runtime_setDrawOrder, "runtime.setDrawOrder");
     lua_setfield(L, -2, "setDrawOrder");
     lua_pushcfunction(L, l_runtime_setUpdateOrder, "runtime.setUpdateOrder");

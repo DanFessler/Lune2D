@@ -26,7 +26,15 @@ local function destroyBullet(id: number)
 end
 
 return {
-	start = function(id: number)
+	properties = defineProperties {
+		asteroidsPerWaveBase = prop.integer(2, { min = 1, max = 15 }),
+		betweenWaveSeconds = prop.number(2, { min = 0.3, max = 12 }),
+		splitShardSpeedMin = prop.number(40 * 1.3, { min = 20, max = 200 }),
+		splitShardSpeedMax = prop.number(110 * 1.3, { min = 40, max = 400 }),
+	},
+
+	start = function(self)
+		local id = self.entityId
 		session.state = "title"
 		session.score = 0
 		session.wave = 0
@@ -37,7 +45,7 @@ return {
 		session.asteroids = {}
 		session.bullets = {}
 	end,
-	update = function(_entityId: number, dt: number)
+	update = function(self, dt: number)
 		local st = session.state
 		if st == "title" or st == "gameover" then
 			return
@@ -47,7 +55,7 @@ return {
 			session.waveDelay -= dt
 			if session.waveDelay <= 0 then
 				session.wave += 1
-				local waveAsts = entities.spawnWave(2 + session.wave)
+				local waveAsts = entities.spawnWave(self.asteroidsPerWaveBase + session.wave)
 				for _, a in ipairs(waveAsts) do
 					local aid = runtime.spawn("Asteroid")
 					runtime.setDrawOrder(aid, 0)
@@ -92,7 +100,7 @@ return {
 							if nextSize then
 								vfx.spawnAsteroidSplitParticles(at.x, at.y, a.size)
 								for _ = 1, 2 do
-									local spd = randf(40 * 1.3, 110 * 1.3)
+									local spd = randf(self.splitShardSpeedMin, self.splitShardSpeedMax)
 									local ang = randf(0, 2 * C.PI)
 									local na = entities.makeAsteroid(
 										at.x,
@@ -183,12 +191,12 @@ return {
 		end
 		if astCount == 0 and session.state == "playing" then
 			session.state = "newwave"
-			session.waveDelay = 2.0
+			session.waveDelay = self.betweenWaveSeconds
 		end
 
 		-- heartbeat
 		if astCount > 0 then
-			local maxAsts = (2 + session.wave) * 4
+			local maxAsts = (self.asteroidsPerWaveBase + session.wave) * 4
 			local ratio = math.min(astCount / maxAsts, 1)
 			local interval = 0.22 + ratio * 0.58
 			session.beatTimer -= dt
@@ -199,5 +207,5 @@ return {
 			end
 		end
 	end,
-	draw = function(_id: number, _t: number) end,
+	draw = function(_self, _t: number) end,
 }

@@ -11,6 +11,28 @@
 
 #include "webview_host.hpp"
 #include "engine/engine.hpp"
+#include "engine/lua/lua_runtime.hpp"
+
+#include <CoreFoundation/CoreFoundation.h>
+#include <cmath>
+#include <nlohmann/json.hpp>
+
+static nlohmann::json nsBridgeArgToJson(id v) {
+    if (v == nil || v == [NSNull null])
+        return nlohmann::json();
+    CFTypeRef cf = (__bridge CFTypeRef)v;
+    if (CFGetTypeID(cf) == CFBooleanGetTypeID())
+        return nlohmann::json(CFBooleanGetValue((CFBooleanRef)cf) ? true : false);
+    if ([v isKindOfClass:[NSNumber class]]) {
+        double d = [v doubleValue];
+        if (std::floor(d) == d && std::fabs(d) <= 9.0e18)
+            return nlohmann::json((int64_t)d);
+        return nlohmann::json(d);
+    }
+    if ([v isKindOfClass:[NSString class]])
+        return nlohmann::json(std::string([v UTF8String]));
+    return nlohmann::json();
+}
 
 // SDL3 property for NSWindow* (see SDL_PROP_WINDOW_COCOA_WINDOW_POINTER).
 #ifndef SDL_PROP_WINDOW_COCOA_WINDOW_POINTER
@@ -618,6 +640,25 @@ static void script_bridge_send(NSDictionary* payload) {
         float val        = [args[2] floatValue];
         g_scene.setTransformField(eid, fld, val);
         script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
+        return;
+    }
+
+    if ([op isEqualToString:@"runtime.setScriptProperty"]) {
+        if (!g_eng_lua_vm) {
+            script_bridge_send(
+                @{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua VM not bound"});
+            return;
+        }
+        uint32_t eid           = [args[0] unsignedIntValue];
+        int      si            = [args[1] intValue];
+        NSString* keyStr       = ([args count] > 2) ? args[2] : nil;
+        id        val          = ([args count] > 3) ? args[3] : [NSNull null];
+        bool      erase        = (val == nil || val == [NSNull null]);
+        nlohmann::json jValue  = erase ? nlohmann::json() : nsBridgeArgToJson(val);
+        bool ok                = eng_scene_mut_set_script_property(
+            g_eng_lua_vm, eid, si, [keyStr UTF8String], erase, jValue);
+        script_bridge_send(ok ? @{@"requestId" : rid, @"ok" : @YES}
+                                : @{@"requestId" : rid, @"ok" : @NO, @"error" : @"setScriptProperty failed"});
         return;
     }
 

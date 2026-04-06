@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { EngineEntity, TransformComponent } from "../../engineBridge";
+import type {
+  BehaviorPropertyField,
+  EngineEntity,
+  ScriptComponent,
+  TransformComponent,
+} from "../../engineBridge";
 import { getEntityTransform } from "../../engineBridge";
 import { engine } from "../../engineProxy";
 import { PiBoundingBoxFill } from "react-icons/pi";
@@ -189,6 +194,199 @@ function EditableFloat({
   );
 }
 
+function BehaviorBoolRow({
+  entityId, scriptIndex, field, value,
+}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  const checked = value === true || value === "true";
+  return (
+    <>
+      <span className={styles.fieldLabel}>{field.name}</span>
+      <label className={`${styles.fieldInput} ${styles.fieldSpan2}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => {
+            void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, e.target.checked);
+          }}
+        />
+      </label>
+    </>
+  );
+}
+
+function BehaviorNumberRow({
+  entityId, scriptIndex, field, value,
+}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  const n = typeof value === "number" ? value : Number(value);
+  const base = Number.isFinite(n) ? n : 0;
+  const [local, setLocal] = useState(String(base));
+  useEffect(() => {
+    const cur = typeof value === "number" ? value : Number(value);
+    setLocal(String(Number.isFinite(cur) ? cur : 0));
+  }, [value, field.name]);
+  const commit = () => {
+    let v = parseFloat(local);
+    if (!Number.isFinite(v)) {
+      setLocal(String(base));
+      return;
+    }
+    if (field.min !== undefined) v = Math.max(field.min, v);
+    if (field.max !== undefined) v = Math.min(field.max, v);
+    if (field.type === "integer") v = Math.round(v);
+    void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, v);
+  };
+  return (
+    <>
+      <span className={styles.fieldLabel}>{field.name}</span>
+      <input
+        className={`${styles.fieldInput} ${styles.fieldSpan2}`}
+        type="number"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && commit()}
+      />
+    </>
+  );
+}
+
+function BehaviorEnumRow({
+  entityId, scriptIndex, field, value,
+}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  const opts = field.enumOptions!;
+  const v = typeof value === "string" ? value : String(value ?? opts[0]);
+  return (
+    <>
+      <span className={styles.fieldLabel}>{field.name}</span>
+      <select
+        className={`${styles.fieldInput} ${styles.fieldSpan2}`}
+        value={v}
+        onChange={(e) => {
+          void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, e.target.value);
+        }}
+      >
+        {opts.map((opt) => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+    </>
+  );
+}
+
+function BehaviorStringRow({
+  entityId, scriptIndex, field, value,
+}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  const v = typeof value === "string" ? value : value == null ? "" : String(value);
+  const [local, setLocal] = useState(v);
+  useEffect(() => {
+    setLocal(typeof value === "string" ? value : value == null ? "" : String(value));
+  }, [value, field.name]);
+  const commit = () => {
+    if (local !== v) void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, local);
+  };
+  return (
+    <>
+      <span className={styles.fieldLabel}>{field.name}</span>
+      <input
+        className={`${styles.fieldInput} ${styles.fieldSpan2}`}
+        type="text"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && commit()}
+      />
+    </>
+  );
+}
+
+function BehaviorJsonRow({
+  entityId, scriptIndex, field, value,
+}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  const raw = (() => {
+    try {
+      return typeof value === "object" ? JSON.stringify(value) : String(value ?? "");
+    } catch {
+      return "";
+    }
+  })();
+  const [local, setLocal] = useState(raw);
+  useEffect(() => {
+    try {
+      setLocal(typeof value === "object" ? JSON.stringify(value) : String(value ?? ""));
+    } catch {
+      setLocal("");
+    }
+  }, [value, field.name]);
+  const commit = () => {
+    const t = field.type;
+    if (t === "object" || t === "color" || t === "vector") {
+      try {
+        const parsed = JSON.parse(local) as unknown;
+        void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, parsed as never);
+      } catch {
+        setLocal(raw);
+      }
+      return;
+    }
+    void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, local);
+  };
+  return (
+    <>
+      <span className={styles.fieldLabel}>{field.name}</span>
+      <textarea
+        className={`${styles.fieldInput} ${styles.fieldSpan2}`}
+        rows={3}
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={commit}
+        style={{ fontFamily: "monospace", fontSize: "11px" }}
+      />
+    </>
+  );
+}
+
+function BehaviorPropertyRow(props: {
+  entityId: number;
+  scriptIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
+  const { field } = props;
+  if (field.type === "boolean") return <BehaviorBoolRow {...props} />;
+  if (field.type === "number" || field.type === "integer") return <BehaviorNumberRow {...props} />;
+  if (field.type === "enum" && field.enumOptions && field.enumOptions.length > 0)
+    return <BehaviorEnumRow {...props} />;
+  if (field.type === "string" || field.type === "asset") return <BehaviorStringRow {...props} />;
+  return <BehaviorJsonRow {...props} />;
+}
+
+function BehaviorPropertyEditor({
+  entityId,
+  scriptIndex,
+  comp,
+}: {
+  entityId: number;
+  scriptIndex: number;
+  comp: ScriptComponent;
+}) {
+  const fields = comp.propertySchema;
+  const vals = comp.propertyValues ?? {};
+  if (!fields?.length) return null;
+  return (
+    <>
+      {fields.map((f) => (
+        <BehaviorPropertyRow
+          key={f.name}
+          entityId={entityId}
+          scriptIndex={scriptIndex}
+          field={f}
+          value={vals[f.name] !== undefined ? vals[f.name] : f.default}
+        />
+      ))}
+    </>
+  );
+}
+
 function TransformFields({ t, entityId }: { t: TransformComponent; entityId: number }) {
   const set = (field: string) => (v: number) =>
     engine.runtime.setTransform(entityId, field, v);
@@ -260,12 +458,16 @@ function ScriptList({ entity, collapseMap, onFold }: {
                 onFold={(c) => onFold(key, c)}
                 onRemove={() => engine.runtime.removeScript(entityId, i)}
               >
-                <span
-                  className={styles.fieldLabel}
-                  style={{ gridColumn: "1 / -1" }}
-                >
-                  Luau behavior
-                </span>
+                {sc.comp.propertySchema && sc.comp.propertySchema.length > 0 ? (
+                  <BehaviorPropertyEditor entityId={entityId} scriptIndex={i} comp={sc.comp} />
+                ) : (
+                  <span
+                    className={styles.fieldLabel}
+                    style={{ gridColumn: "1 / -1" }}
+                  >
+                    Luau behavior (add <code>properties = defineProperties {"{ ... }"}</code> to expose fields)
+                  </span>
+                )}
               </CollapsibleBlock>
             </SortableItem>
           );

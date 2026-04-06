@@ -1,5 +1,8 @@
 #include "scene.hpp"
 
+#include "engine/lua/behavior_instance.hpp"
+#include "engine/lua/lua_runtime.hpp"
+
 #include <algorithm>
 #include <cstring>
 
@@ -22,10 +25,22 @@ void Scene::insertEntityWithId(uint32_t id, std::string name) {
 }
 
 void Scene::destroy(uint32_t id) {
-    entities_.erase(id);
+    auto it = entities_.find(id);
+    if (it == entities_.end())
+        return;
+    if (g_eng_lua_vm) {
+        for (auto& s : it->second.scripts)
+            eng_behavior_release_script_self(g_eng_lua_vm, s);
+    }
+    entities_.erase(it);
 }
 
 void Scene::clear() {
+    if (g_eng_lua_vm) {
+        for (auto& p : entities_)
+            for (auto& s : p.second.scripts)
+                eng_behavior_release_script_self(g_eng_lua_vm, s);
+    }
     entities_.clear();
     nextId_ = 1;
 }
@@ -40,13 +55,16 @@ const Entity* Scene::entity(uint32_t id) const {
     return it == entities_.end() ? nullptr : &it->second;
 }
 
-bool Scene::addScript(uint32_t entityId, const char* behaviorName) {
+bool Scene::addScript(uint32_t entityId, const char* behaviorName,
+                      const nlohmann::json& propertyOverrides) {
     Entity* e = entity(entityId);
     if (!e || !behaviorName || behaviorName[0] == '\0')
         return false;
     ScriptInstance s;
-    s.behavior = behaviorName;
-    s.started  = false;
+    s.behavior           = behaviorName;
+    s.started            = false;
+    s.propertyOverrides  = propertyOverrides.is_object() ? propertyOverrides : nlohmann::json::object();
+    s.luaInstanceRef     = -1;
     e->scripts.push_back(std::move(s));
     return true;
 }
@@ -79,6 +97,8 @@ bool Scene::removeScript(uint32_t entityId, int index) {
     Entity* e = entity(entityId);
     if (!e || index < 0 || index >= (int)e->scripts.size())
         return false;
+    if (g_eng_lua_vm)
+        eng_behavior_release_script_self(g_eng_lua_vm, e->scripts[index]);
     e->scripts.erase(e->scripts.begin() + index);
     return true;
 }
@@ -147,6 +167,24 @@ void Scene::resetScriptStartedFlags() {
     for (auto& pair : entities_) {
         for (auto& s : pair.second.scripts)
             s.started = false;
+    }
+}
+
+void Scene::releaseAllScriptLuaRefs(lua_State* L) {
+    if (!L)
+        return;
+    for (auto& pair : entities_) {
+        for (auto& s : pair.second.scripts)
+            eng_behavior_release_script_self(L, s);
+    }
+}
+
+void Scene::invalidateAllBehaviorLuaRefs() {
+    for (auto& pair : entities_) {
+        for (auto& s : pair.second.scripts) {
+            s.luaInstanceRef = -1;
+            s.scriptVmGen    = 0;
+        }
     }
 }
 

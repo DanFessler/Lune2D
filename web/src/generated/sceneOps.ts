@@ -92,6 +92,27 @@ export const sceneOpDefs: SceneOpDef[] = [
     ]
   },
   {
+    "op": "runtime.setScriptProperty",
+    "args": [
+      {
+        "name": "id",
+        "type": "number"
+      },
+      {
+        "name": "scriptIndex",
+        "type": "number"
+      },
+      {
+        "name": "key",
+        "type": "string"
+      },
+      {
+        "name": "value",
+        "type": "any"
+      }
+    ]
+  },
+  {
     "op": "runtime.removeScript",
     "args": [
       {
@@ -170,6 +191,7 @@ export type SceneOp_runtime_setActive = { op: "runtime.setActive"; args: [number
 export type SceneOp_runtime_setDrawOrder = { op: "runtime.setDrawOrder"; args: [number, number] };
 export type SceneOp_runtime_setUpdateOrder = { op: "runtime.setUpdateOrder"; args: [number, number] };
 export type SceneOp_runtime_addScript = { op: "runtime.addScript"; args: [number, string] };
+export type SceneOp_runtime_setScriptProperty = { op: "runtime.setScriptProperty"; args: [number, number, string, unknown] };
 export type SceneOp_runtime_removeScript = { op: "runtime.removeScript"; args: [number, number] };
 export type SceneOp_runtime_reorderScript = { op: "runtime.reorderScript"; args: [number, number, number] };
 export type SceneOp_runtime_setParent = { op: "runtime.setParent"; args: [number, number] };
@@ -184,6 +206,7 @@ export type SceneOp =
   | SceneOp_runtime_setDrawOrder
   | SceneOp_runtime_setUpdateOrder
   | SceneOp_runtime_addScript
+  | SceneOp_runtime_setScriptProperty
   | SceneOp_runtime_removeScript
   | SceneOp_runtime_reorderScript
   | SceneOp_runtime_setParent
@@ -200,6 +223,7 @@ export interface EngineRuntimeApi {
   setDrawOrder(id: number, order: number): Promise<void>;
   setUpdateOrder(id: number, order: number): Promise<void>;
   addScript(id: number, behavior: string): Promise<void>;
+  setScriptProperty(id: number, scriptIndex: number, key: string, value: unknown): Promise<void>;
   removeScript(id: number, index: number): Promise<void>;
   reorderScript(id: number, fromIndex: number, toIndex: number): Promise<void>;
   setParent(id: number, parentId: number): Promise<void>;
