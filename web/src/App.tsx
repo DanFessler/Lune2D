@@ -21,6 +21,10 @@ export default function App() {
   const [gameSurface, setGameSurface] = useState<HTMLDivElement | null>(null);
   const entities = useEngineEntities();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Skip pushing selection to native when it came from viewport/Luau (avoids races + echo). */
+  const fromNativeSelectionRef = useRef(false);
+  /** Tracks prior selectedId for sync effect (distinguish mount / StrictMode from real deselect). */
+  const prevSelectedIdRef = useRef<string | null | undefined>(undefined);
   const [luaOpenFileRequest, setLuaOpenFileRequest] =
     useState<LuaEditorOpenRequest | null>(null);
   const luaOpenSeq = useRef(0);
@@ -57,6 +61,7 @@ export default function App() {
 
   useEffect(() => {
     window.__engineSelectEntity = (id: number | string | null) => {
+      fromNativeSelectionRef.current = true;
       if (id == null || id === "") setSelectedId(null);
       else setSelectedId(String(id));
     };
@@ -68,6 +73,47 @@ export default function App() {
   useEffect(() => {
     const bridge = window.__engineScriptBridge;
     if (!bridge) return;
+    let cancelled = false;
+    void bridge
+      .call("editor.getSelectedEntityId", { args: [] })
+      .then((res) => {
+        if (cancelled) return;
+        const raw = (res as { result?: unknown }).result;
+        const id =
+          typeof raw === "number" && Number.isFinite(raw)
+            ? raw
+            : typeof raw === "string" && raw !== ""
+              ? Number(raw)
+              : 0;
+        if (id <= 0) return;
+        fromNativeSelectionRef.current = true;
+        setSelectedId((cur) => (cur == null ? String(id) : cur));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const bridge = window.__engineScriptBridge;
+    if (!bridge) return;
+
+    if (fromNativeSelectionRef.current) {
+      fromNativeSelectionRef.current = false;
+      prevSelectedIdRef.current = selectedId;
+      return;
+    }
+
+    const prev = prevSelectedIdRef.current;
+    prevSelectedIdRef.current = selectedId;
+
+    // Avoid pushing null on initial mount / StrictMode duplicate pass; a late async RPC
+    // would clear native selection after a viewport pick before React hydrates.
+    if (selectedId == null && (prev === undefined || prev === null)) {
+      return;
+    }
+
     const args: unknown[] = selectedId == null ? [null] : [Number(selectedId)];
     void bridge.call("editor.setSelectedEntity", { args }).catch(() => {});
   }, [selectedId]);

@@ -670,6 +670,12 @@ static void script_bridge_send(NSDictionary* payload) {
         return;
     }
 
+    if ([op isEqualToString:@"editor.getSelectedEntityId"]) {
+        uint32_t eid = eng_editor_selected_entity();
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"result" : @(eid)});
+        return;
+    }
+
     if ([op isEqualToString:@"editor.setSelectedEntity"]) {
         NSArray* a = d[@"args"];
         uint32_t eid = 0;
