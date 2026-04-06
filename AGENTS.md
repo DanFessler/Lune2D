@@ -1,6 +1,6 @@
 # AGENTS.md — Lune2D (ctx-style engine + editor, Asteroids sample)
 
-This file orients AI agents and contributors to **what this repository is**, **what we’re building toward**, and **how it relates to ctx-engine / [ctx-game](https://github.com/DanFessler/ctx-game)**.
+This file orients AI agents and contributors to **what this repository is**, **what we’re building toward**, and **how it relates to ctx-engine / [ctx-game](https://github.com/DanFessler/ctx-game/tree/develop)**. (we point to the develop branch for latest updates)
 
 ## What this project is
 
@@ -23,14 +23,14 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 
 ## Repository layout (high level)
 
-| Area       | Role                                                                                                                                                     |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/`     | Engine + app glue: SDL loop, `Scene`, Luau runtime APIs, draw/input/audio, **WebKit host** (`webview_host_mac.mm`), scene load/save (`scene_loader.cpp`) |
-| `lua/`              | **Engine Luau** bundled with the repo: `editor/` (strict editor behaviors). Not game content.                                                                      |
-| `default-project/`  | **Shipped sample game** (Asteroids): `behaviors/`, `game/`, `scenes/`, `entities.lua`—stand-in for a user project directory outside the engine later.                  |
-| `web/`     | React **editor**: dockable layout, hierarchy, inspector, Lua panel, generated bridge helpers                                                             |
-| `scripts/` | e.g. `gen-scene-ops.mjs` for RPC surface                                                                                                                 |
-| `shared/`  | Cross-cutting artifacts (schema/codegen, etc.)                                                                                                           |
+| Area               | Role                                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`             | Engine + app glue: SDL loop, `Scene`, Luau runtime APIs, draw/input/audio, **WebKit host** (`webview_host_mac.mm`), scene load/save (`scene_loader.cpp`) |
+| `lua/`             | **Engine Luau** bundled with the repo: `editor/` (strict editor behaviors). Not game content.                                                            |
+| `default-project/` | **Shipped sample game** (Asteroids): `behaviors/`, `game/`, `scenes/`, `entities.lua`—stand-in for a user project directory outside the engine later.    |
+| `web/`             | React **editor**: dockable layout, hierarchy, inspector, Lua panel, generated bridge helpers                                                             |
+| `scripts/`         | e.g. `gen-scene-ops.mjs` for RPC surface                                                                                                                 |
+| `shared/`          | Cross-cutting artifacts (schema/codegen, etc.)                                                                                                           |
 
 ## Reference: **ctx-engine**
 
