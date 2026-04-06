@@ -181,6 +181,9 @@ int main(int argc, char* argv[]) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_EVENT_QUIT) {
                 g_eng.quit = true;
+            } else if (ev.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+                // Key-ups can be delivered elsewhere (another app, or WKWebView); avoid stuck keys.
+                SDL_ResetKeyboard();
             } else if (ev.type == SDL_EVENT_WINDOW_RESIZED) {
                 int pw = 0, ph = 0;
                 SDL_GetWindowSizeInPixels(g_eng.window, &pw, &ph);
@@ -223,6 +226,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        webview_host_sync_sdl_keyboard_state();
         g_eng.keys = SDL_GetKeyboardState(nullptr);
 
         if (s_script_reload_requested.exchange(false, std::memory_order_acq_rel)) {

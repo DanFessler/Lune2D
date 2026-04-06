@@ -73,3 +73,7 @@ void webview_host_set_macos_scenes_directory_for_save_panel(const char* scenes_d
 void webview_host_install_macos_app_menu(void (*on_quit_requested)(void),
                                          void (*on_save_scene_default)(void),
                                          void (*on_save_scene_as)(const char* absolute_path_utf8));
+
+/// Clear SDL keyboard state when UI focus moves to the web overlay (macOS) so key-ups are not
+/// missed. Safe no-op on stubs or when no overlay. Call once per frame after SDL_PollEvent.
+void webview_host_sync_sdl_keyboard_state(void);

@@ -86,7 +86,18 @@ static NSWindow*         s_nsWindow = nil;
 static WebViewGameRectFn s_rectCb   = nullptr;
 static void*             s_rectUser = nullptr;
 static bool              s_webview_visible = true;
+/// Tracks NSWindow.firstResponder inside WKWebView; used to detect focus moves that skip SDL key-ups.
+static bool              s_was_overlay_keyboard_focus = false;
 static void              inject_sdl_ui_basis(WKWebView* webView);
+
+static BOOL webview_overlay_has_keyboard_focus(void) {
+    if (!s_webView || !s_nsWindow || !s_webview_visible)
+        return NO;
+    NSResponder* fr = s_nsWindow.firstResponder;
+    if (!fr || ![fr isKindOfClass:[NSView class]])
+        return NO;
+    return [(NSView*)fr isDescendantOf:s_webView];
+}
 
 static std::string              s_lua_workspace;
 static void (*s_on_script_reload)(void)                = nullptr;
@@ -750,8 +761,13 @@ bool webview_host_toggle_visibility() {
             return false;
         s_webview_visible = !s_webview_visible;
         s_webView.hidden = s_webview_visible ? NO : YES;
-        if (s_webview_visible)
+        if (s_webview_visible) {
             inject_sdl_ui_basis(s_webView);
+        } else {
+            // Key-ups while the hidden overlay held focus never reached SDL; clear stale state.
+            SDL_ResetKeyboard();
+            s_was_overlay_keyboard_focus = false;
+        }
         return s_webview_visible;
     }
 }
@@ -971,6 +987,15 @@ void webview_host_publish_entities_json(const char* json_utf8) {
                             NSLog(@"publish_entities: %@", error);
                     }];
     }
+}
+
+void webview_host_sync_sdl_keyboard_state(void) {
+    if (!s_webView || !s_nsWindow)
+        return;
+    BOOL now = webview_overlay_has_keyboard_focus();
+    if (now && !s_was_overlay_keyboard_focus)
+        SDL_ResetKeyboard();
+    s_was_overlay_keyboard_focus = now;
 }
 
 void webview_host_shutdown() {

@@ -46,3 +46,5 @@ void webview_host_set_macos_scenes_directory_for_save_panel(const char* /*scenes
 void webview_host_install_macos_app_menu(void (* /*on_quit*/)(void),
                                          void (* /*on_save_default*/)(void),
                                          void (* /*on_save_as*/)(const char*)) {}
+
+void webview_host_sync_sdl_keyboard_state(void) {}
