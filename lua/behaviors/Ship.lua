@@ -23,13 +23,13 @@ local function spawnBulletFromShip(self: any, sx: number, sy: number, sang: numb
 	audio.play("shoot")
 end
 
-return {
+	return {
 	properties = defineProperties {
-		rotateSpeed = prop.number(C.SHIP_ROT_SPD, { min = 60, max = 400 }),
-		thrust = prop.number(C.SHIP_THRUST, { min = 80, max = 600 }),
-		maxSpeed = prop.number(C.SHIP_MAX_SPD, { min = 150, max = 800 }),
-		shootCooldown = prop.number(C.SHOOT_COOLDOWN, { min = 0.06, max = 0.8 }),
-		lives = prop.integer(3, { min = 1, max = 9 }),
+		rotateSpeed = prop.number(C.SHIP_ROT_SPD, { min = 60, max = 400, slider = true }),
+		thrust = prop.number(C.SHIP_THRUST, { min = 80, max = 600, slider = true }),
+		maxSpeed = prop.number(C.SHIP_MAX_SPD, { min = 150, max = 800, slider = true }),
+		shootCooldown = prop.number(C.SHOOT_COOLDOWN, { min = 0.06, max = 0.8, slider = true }),
+		lives = prop.integer(3, { min = 1, max = 9, slider = true }),
 		bulletSpeed = prop.number(C.BULLET_SPD, { min = 250, max = 780 }),
 		bulletLife = prop.number(C.BULLET_LIFE, { min = 0.25, max = 2.5 }),
 		hullColor = prop.color(255, 255, 255, 255),

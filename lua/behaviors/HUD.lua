@@ -18,11 +18,11 @@ local function startGame()
 	end
 end
 
-return {
+	return {
 	properties = defineProperties {
 		showFps = true,
-		scoreScale = prop.number(2.5, { min = 1, max = 6 }),
-		livesIconScale = prop.number(1, { min = 0.5, max = 2 }),
+		scoreScale = prop.number(2.5, { min = 1, max = 6, slider = true }),
+		livesIconScale = prop.number(1, { min = 0.5, max = 2, slider = true }),
 	},
 
 	start = function(_self)

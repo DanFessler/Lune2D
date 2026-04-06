@@ -31,6 +31,22 @@ static nlohmann::json nsBridgeArgToJson(id v) {
     }
     if ([v isKindOfClass:[NSString class]])
         return nlohmann::json(std::string([v UTF8String]));
+    if ([v isKindOfClass:[NSArray class]]) {
+        nlohmann::json arr = nlohmann::json::array();
+        for (id item in (NSArray*)v)
+            arr.push_back(nsBridgeArgToJson(item));
+        return arr;
+    }
+    if ([v isKindOfClass:[NSDictionary class]]) {
+        nlohmann::json o    = nlohmann::json::object();
+        NSDictionary* dict = (NSDictionary*)v;
+        for (id key in dict) {
+            if (![key isKindOfClass:[NSString class]])
+                continue;
+            o[std::string([(NSString*)key UTF8String])] = nsBridgeArgToJson(dict[key]);
+        }
+        return o;
+    }
     return nlohmann::json();
 }
 

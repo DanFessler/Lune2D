@@ -20,6 +20,8 @@ struct BehaviorPropField {
     std::optional<double>      minVal;
     std::optional<double>      maxVal;
     std::vector<std::string>   enumOptions;
+    /// When true, editor may show a range control (requires min and max in Lua metadata).
+    bool                       slider = false;
 };
 
 struct BehaviorSchema {

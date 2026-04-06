@@ -81,7 +81,7 @@ end
 
 local prop: any = {}
 
-function prop.number(default: number, meta: { min: number?, max: number? }?): any
+function prop.number(default: number, meta: { min: number?, max: number?, slider: boolean? }?): any
 	local d: any = { [PROP_MARK] = true, type = "number", default = default }
 	if meta then
 		if meta.min ~= nil then
@@ -90,11 +90,17 @@ function prop.number(default: number, meta: { min: number?, max: number? }?): an
 		if meta.max ~= nil then
 			d.max = meta.max
 		end
+		if meta.slider then
+			if meta.min == nil or meta.max == nil then
+				error("prop.number: slider requires min and max")
+			end
+			d.slider = true
+		end
 	end
 	return d
 end
 
-function prop.integer(default: number, meta: { min: number?, max: number? }?): any
+function prop.integer(default: number, meta: { min: number?, max: number?, slider: boolean? }?): any
 	local d: any = { [PROP_MARK] = true, type = "integer", default = math.floor(default) }
 	if meta then
 		if meta.min ~= nil then
@@ -102,6 +108,12 @@ function prop.integer(default: number, meta: { min: number?, max: number? }?): a
 		end
 		if meta.max ~= nil then
 			d.max = meta.max
+		end
+		if meta.slider then
+			if meta.min == nil or meta.max == nil then
+				error("prop.integer: slider requires min and max")
+			end
+			d.slider = true
 		end
 	end
 	return d

@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { RgbaColorPicker } from "react-colorful";
+import type { RgbaColor } from "react-colorful";
 import type {
   BehaviorPropertyField,
   EngineEntity,
@@ -18,6 +21,7 @@ import {
   DragOverlay,
   type DragEndEvent,
 } from "@dnd-kit/core";
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -25,6 +29,16 @@ import {
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import SortableItem from "../components/SortableItem";
 import styles from "./Inspector.module.css";
+
+function parseBehaviorColor(value: unknown): [number, number, number, number] {
+  if (!Array.isArray(value) || value.length < 3) return [255, 255, 255, 255];
+  const ch = (i: number, fallback: number) => {
+    const x = Number(value[i]);
+    return Number.isFinite(x) ? Math.max(0, Math.min(255, Math.round(x))) : fallback;
+  };
+  const a = value.length >= 4 ? ch(3, 255) : 255;
+  return [ch(0, 255), ch(1, 255), ch(2, 255), a];
+}
 
 function useComponentCollapseMap(keysSig: string) {
   const [collapseMap, setCollapseMap] = useState<Record<string, boolean>>({});
@@ -59,6 +73,8 @@ function CollapsibleBlock({
   onFold,
   onToggleActive,
   onRemove,
+  sortableActivatorRef,
+  sortableListeners,
   children,
 }: {
   name: string;
@@ -69,6 +85,9 @@ function CollapsibleBlock({
   onFold: (collapsed: boolean) => void;
   onToggleActive?: () => void;
   onRemove?: () => void;
+  /** When set with sortableListeners, dnd-kit drag only starts from this header (not property fields). */
+  sortableActivatorRef?: (element: HTMLElement | null) => void;
+  sortableListeners?: DraggableSyntheticListeners;
   children: ReactNode;
 }) {
   return (
@@ -77,7 +96,9 @@ function CollapsibleBlock({
       style={{ boxShadow: "0 -1px 0 rgba(0, 0, 0, 0.1)" }}
     >
       <div
-        className={styles.behaviorHeader}
+        ref={sortableActivatorRef ?? undefined}
+        {...(sortableListeners ?? {})}
+        className={`${styles.behaviorHeader}${sortableListeners ? ` ${styles.behaviorHeaderDraggable}` : ""}`}
         onClick={() => onFold(!isCollapsed)}
       >
         <input
@@ -86,6 +107,7 @@ function CollapsibleBlock({
           disabled={!canDisable}
           aria-label={`${name} active`}
           onChange={() => onToggleActive?.()}
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         />
         {icon}
@@ -93,8 +115,10 @@ function CollapsibleBlock({
         <div className={styles.spacer} />
         {onRemove ? (
           <button
+            type="button"
             className={styles.removeBtn}
             aria-label={`Remove ${name}`}
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
           >
             <FaTimes />
@@ -214,6 +238,168 @@ function BehaviorBoolRow({
   );
 }
 
+const COLOR_POPOVER_MARGIN = 8;
+const COLOR_POPOVER_GAP = 6;
+
+function clampColorPopoverPosition(
+  trigger: DOMRect,
+  panelW: number,
+  panelH: number,
+): { top: number; left: number } {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const m = COLOR_POPOVER_MARGIN;
+  let top = trigger.bottom + COLOR_POPOVER_GAP;
+  let left = trigger.left;
+  if (top + panelH > vh - m) top = trigger.top - panelH - COLOR_POPOVER_GAP;
+  if (top < m) top = m;
+  if (top + panelH > vh - m) top = Math.max(m, vh - m - panelH);
+  if (left + panelW > vw - m) left = vw - m - panelW;
+  if (left < m) left = m;
+  return { top, left };
+}
+
+function BehaviorColorRow({
+  entityId, scriptIndex, field, value,
+}: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
+  const [r, g, b, a255] = parseBehaviorColor(value);
+  const fromProps: RgbaColor = useMemo(
+    () => ({ r, g, b, a: a255 / 255 }),
+    [r, g, b, a255],
+  );
+
+  const [open, setOpen] = useState(false);
+  /** While the popover is open, drive the picker from local state only so bridge round-trips don't fight the drag. */
+  const [pickerColor, setPickerColor] = useState<RgbaColor>(fromProps);
+  useEffect(() => {
+    if (open) return;
+    setPickerColor(fromProps);
+  }, [fromProps, open]);
+
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
+
+  const updatePopoverPosition = useCallback(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const panel = panelRef.current;
+    let pw = panel?.offsetWidth ?? 0;
+    let ph = panel?.offsetHeight ?? 0;
+    if (pw < 2 || ph < 2) {
+      pw = 224;
+      ph = 320;
+    }
+    setPopoverPos(clampColorPopoverPosition(rect, pw, ph));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePopoverPosition();
+    const id = requestAnimationFrame(() => updatePopoverPosition());
+    const panel = panelRef.current;
+    const ro = new ResizeObserver(() => updatePopoverPosition());
+    if (panel) ro.observe(panel);
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
+    return () => {
+      cancelAnimationFrame(id);
+      ro.disconnect();
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition, true);
+    };
+  }, [open, updatePopoverPosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const pushColorToEngine = useCallback(
+    (c: RgbaColor) => {
+      void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, [
+        Math.max(0, Math.min(255, Math.round(c.r))),
+        Math.max(0, Math.min(255, Math.round(c.g))),
+        Math.max(0, Math.min(255, Math.round(c.b))),
+        Math.max(0, Math.min(255, Math.round(c.a * 255))),
+      ]);
+    },
+    [entityId, scriptIndex, field.name],
+  );
+
+  const onPickerChange = useCallback(
+    (c: RgbaColor) => {
+      setPickerColor(c);
+      pushColorToEngine(c);
+    },
+    [pushColorToEngine],
+  );
+
+  const togglePopover = useCallback(() => {
+    setOpen((prev) => {
+      if (!prev) setPickerColor(fromProps);
+      return !prev;
+    });
+  }, [fromProps]);
+
+  const swatch = open ? pickerColor : fromProps;
+  const swatchR = Math.round(swatch.r);
+  const swatchG = Math.round(swatch.g);
+  const swatchB = Math.round(swatch.b);
+  const swatchA = swatch.a;
+
+  const popover =
+    open && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={panelRef}
+            className={styles.colorPopoverPanel}
+            role="dialog"
+            aria-label={`${field.name} color`}
+            style={{ top: popoverPos.top, left: popoverPos.left }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <RgbaColorPicker color={pickerColor} onChange={onPickerChange} />
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      <span className={styles.fieldLabel} title={field.name}>{field.name}</span>
+      <div className={styles.colorPopoverWrap} ref={wrapRef}>
+        <button
+          type="button"
+          className={styles.colorSwatchTrigger}
+          aria-label={`${field.name} — open color picker`}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={togglePopover}
+        >
+          <span className={styles.colorSwatchChecker} aria-hidden />
+          <span
+            className={styles.colorSwatchFill}
+            style={{
+              background: `rgba(${swatchR},${swatchG},${swatchB},${swatchA})`,
+            }}
+            aria-hidden
+          />
+        </button>
+        {popover}
+      </div>
+    </>
+  );
+}
+
 function BehaviorNumberRow({
   entityId, scriptIndex, field, value,
 }: { entityId: number; scriptIndex: number; field: BehaviorPropertyField; value: unknown }) {
@@ -224,6 +410,7 @@ function BehaviorNumberRow({
     const cur = typeof value === "number" ? value : Number(value);
     setLocal(String(Number.isFinite(cur) ? cur : 0));
   }, [value, field.name]);
+
   const commit = () => {
     let v = parseFloat(local);
     if (!Number.isFinite(v)) {
@@ -235,9 +422,58 @@ function BehaviorNumberRow({
     if (field.type === "integer") v = Math.round(v);
     void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, v);
   };
+
+  const useSlider =
+    field.slider === true &&
+    field.min !== undefined &&
+    field.max !== undefined &&
+    field.min < field.max;
+
+  const pushLive = (v: number) => {
+    let x = v;
+    if (field.min !== undefined) x = Math.max(field.min, x);
+    if (field.max !== undefined) x = Math.min(field.max, x);
+    if (field.type === "integer") x = Math.round(x);
+    setLocal(String(x));
+    void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, x);
+  };
+
+  if (useSlider) {
+    const min = field.min as number;
+    const max = field.max as number;
+    const parsed = parseFloat(local);
+    const safe = Number.isFinite(parsed)
+      ? Math.min(max, Math.max(min, field.type === "integer" ? Math.round(parsed) : parsed))
+      : min;
+    return (
+      <>
+        <span className={styles.fieldLabel} title={field.name}>{field.name}</span>
+        <input
+          type="range"
+          className={styles.fieldRange}
+          min={min}
+          max={max}
+          step={field.type === "integer" ? 1 : "any"}
+          value={safe}
+          aria-label={`${field.name} slider`}
+          onChange={(e) => pushLive(parseFloat(e.target.value))}
+        />
+        <input
+          type="number"
+          className={styles.fieldInput}
+          value={local}
+          aria-label={`${field.name} exact value`}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === "Enter" && commit()}
+        />
+      </>
+    );
+  }
+
   return (
     <>
-      <span className={styles.fieldLabel}>{field.name}</span>
+      <span className={styles.fieldLabel} title={field.name}>{field.name}</span>
       <input
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         type="number"
@@ -319,7 +555,7 @@ function BehaviorJsonRow({
   }, [value, field.name]);
   const commit = () => {
     const t = field.type;
-    if (t === "object" || t === "color" || t === "vector") {
+    if (t === "object" || t === "vector") {
       try {
         const parsed = JSON.parse(local) as unknown;
         void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, parsed as never);
@@ -354,6 +590,7 @@ function BehaviorPropertyRow(props: {
   const { field } = props;
   if (field.type === "boolean") return <BehaviorBoolRow {...props} />;
   if (field.type === "number" || field.type === "integer") return <BehaviorNumberRow {...props} />;
+  if (field.type === "color") return <BehaviorColorRow {...props} />;
   if (field.type === "enum" && field.enumOptions && field.enumOptions.length > 0)
     return <BehaviorEnumRow {...props} />;
   if (field.type === "string" || field.type === "asset") return <BehaviorStringRow {...props} />;
@@ -447,28 +684,49 @@ function ScriptList({ entity, collapseMap, onFold }: {
         {scriptComponents.map((sc, i) => {
           if (sc.comp.type !== "Script") return null;
           const key = `script:${i}:${sc.comp.behavior}`;
+          const propertyBody =
+            sc.comp.propertySchema && sc.comp.propertySchema.length > 0 ? (
+              <BehaviorPropertyEditor entityId={entityId} scriptIndex={i} comp={sc.comp} />
+            ) : (
+              <span className={styles.fieldLabel} style={{ gridColumn: "1 / -1" }}>
+                Luau behavior (add <code>properties = defineProperties {"{ ... }"}</code> to expose fields)
+              </span>
+            );
+          const dragOverlay = (
+            <CollapsibleBlock
+              name={sc.comp.behavior}
+              icon={<FaCode style={{ width: "14px", height: "14px" }} />}
+              canDisable={false}
+              active={true}
+              isCollapsed={false}
+              onFold={() => {}}
+              onRemove={undefined}
+            >
+              {propertyBody}
+            </CollapsibleBlock>
+          );
           return (
-            <SortableItem key={scriptIds[i]} id={scriptIds[i]} data={{ type: "behavior" }}>
-              <CollapsibleBlock
-                name={sc.comp.behavior}
-                icon={<FaCode style={{ width: "14px", height: "14px" }} />}
-                canDisable={false}
-                active={true}
-                isCollapsed={collapseMap[key] ?? false}
-                onFold={(c) => onFold(key, c)}
-                onRemove={() => engine.runtime.removeScript(entityId, i)}
-              >
-                {sc.comp.propertySchema && sc.comp.propertySchema.length > 0 ? (
-                  <BehaviorPropertyEditor entityId={entityId} scriptIndex={i} comp={sc.comp} />
-                ) : (
-                  <span
-                    className={styles.fieldLabel}
-                    style={{ gridColumn: "1 / -1" }}
-                  >
-                    Luau behavior (add <code>properties = defineProperties {"{ ... }"}</code> to expose fields)
-                  </span>
-                )}
-              </CollapsibleBlock>
+            <SortableItem
+              key={scriptIds[i]}
+              id={scriptIds[i]}
+              data={{ type: "behavior" }}
+              dragOverlay={dragOverlay}
+            >
+              {(handle) => (
+                <CollapsibleBlock
+                  name={sc.comp.behavior}
+                  icon={<FaCode style={{ width: "14px", height: "14px" }} />}
+                  canDisable={false}
+                  active={true}
+                  isCollapsed={collapseMap[key] ?? false}
+                  onFold={(c) => onFold(key, c)}
+                  onRemove={() => engine.runtime.removeScript(entityId, i)}
+                  sortableActivatorRef={handle.setActivatorNodeRef}
+                  sortableListeners={handle.listeners}
+                >
+                  {propertyBody}
+                </CollapsibleBlock>
+              )}
             </SortableItem>
           );
         })}

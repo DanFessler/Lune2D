@@ -14,6 +14,8 @@ export type BehaviorPropertyField = {
   default?: unknown;
   min?: number;
   max?: number;
+  /** When true (from prop.number/integer with slider + min/max), inspector shows a range control. */
+  slider?: boolean;
   enumOptions?: string[];
 };
 

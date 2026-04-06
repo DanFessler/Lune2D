@@ -90,8 +90,8 @@ export type BehaviorDesc = {
 -- Set by the VM before behaviors load; behaviors may use without require.
 declare defineProperties: (t: { [string]: any }) -> any
 declare prop: {
-	number: (default: number, meta: { min: number?, max: number? }?) -> any,
-	integer: (default: number, meta: { min: number?, max: number? }?) -> any,
+	number: (default: number, meta: { min: number?, max: number?, slider: boolean? }?) -> any,
+	integer: (default: number, meta: { min: number?, max: number?, slider: boolean? }?) -> any,
 	string: (default: string) -> any,
 	boolean: (default: boolean) -> any,
 	enum: (default: string, options: { string }) -> any,

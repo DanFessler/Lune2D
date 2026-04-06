@@ -148,6 +148,11 @@ void eng_behavior_schema_register_from_module(lua_State* L,
         if (f.type == "enum")
             readEnumOptions(L, descIdx, f);
 
+        lua_getfield(L, descIdx, "slider");
+        if (lua_isboolean(L, -1))
+            f.slider = lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+
         schema.order.push_back(std::move(f));
         lua_pop(L, 1);
     }
@@ -303,6 +308,8 @@ nlohmann::json eng_behavior_schema_to_editor_json(const char* behaviorName) {
             row["max"] = *f.maxVal;
         if (!f.enumOptions.empty())
             row["enumOptions"] = f.enumOptions;
+        if (f.slider)
+            row["slider"] = true;
         arr.push_back(std::move(row));
     }
     return arr;
