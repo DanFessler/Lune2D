@@ -59,6 +59,7 @@ add_executable(lune2d
     src/engine/lua/lua_require.cpp
     src/engine/lua/lua_api_register.cpp
     src/engine/lua/lua_editor.cpp
+    src/engine/lua/lua_editor_input.cpp
     src/engine/lua/script_host.cpp
     src/engine/scene_loader.cpp
 )
@@ -67,6 +68,21 @@ enable_testing()
 add_executable(viewport_math_tests tests/viewport_math_test.cpp src/viewport_math.cpp)
 target_include_directories(viewport_math_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME viewport_math COMMAND viewport_math_tests)
+
+add_executable(behavior_model_tests tests/behavior_model_test.cpp src/scene.cpp)
+target_include_directories(behavior_model_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua)
+target_link_libraries(behavior_model_tests PRIVATE nlohmann_json::nlohmann_json)
+add_test(NAME behavior_model COMMAND behavior_model_tests)
+
+add_executable(editor_input_tests tests/editor_input_test.cpp
+    src/editor_state.cpp
+    src/engine/lua/lua_editor_input.cpp)
+target_include_directories(editor_input_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua)
+add_test(NAME editor_input COMMAND editor_input_tests)
 
 if(APPLE)
     enable_language(OBJCXX)

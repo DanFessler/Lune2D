@@ -9,7 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "behavior_instance.hpp"
-#include "behavior_schema.hpp" // eng_behavior_lua_number_to_json
+#include "behavior_schema.hpp"
 #include "editor_state.hpp"
 #include "engine/engine.hpp"
 #include "engine/immediate_draw.hpp"
@@ -24,14 +24,30 @@ void eng_lua_bind_main_vm(lua_State *L)
     g_eng_lua_vm = L;
 }
 
-bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int scriptIndex,
+bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int behaviorIndex,
                                        const char *key, bool erase,
                                        const nlohmann::json &value)
 {
     Entity *e = g_scene.entity(entityId);
-    if (!e || scriptIndex < 0 || scriptIndex >= (int)e->scripts.size() || !key)
+    if (!e || behaviorIndex < 0 || behaviorIndex >= (int)e->behaviors.size() || !key)
         return false;
-    ScriptInstance &sc = e->scripts[scriptIndex];
+    BehaviorSlot &slot = e->behaviors[behaviorIndex];
+    if (slot.isNative)
+    {
+        if (slot.name == "Transform")
+        {
+            if (!erase)
+            {
+                float fval = 0.0f;
+                if (value.is_number())
+                    fval = value.get<float>();
+                g_scene.setTransformField(entityId, key, fval);
+            }
+            return true;
+        }
+        return false;
+    }
+    ScriptInstance &sc = slot.script;
     if (erase)
         sc.propertyOverrides.erase(key);
     else
@@ -175,7 +191,7 @@ static int l_runtime_removeScript(lua_State *L)
 {
     uint32_t id = (uint32_t)luaL_checkinteger(L, 1);
     int idx = (int)luaL_checkinteger(L, 2);
-    if (!g_scene.removeScript(id, idx))
+    if (!g_scene.removeBehavior(id, idx))
         luaL_error(L, "removeScript failed");
     return 0;
 }
@@ -185,7 +201,7 @@ static int l_runtime_reorderScript(lua_State *L)
     uint32_t id = (uint32_t)luaL_checkinteger(L, 1);
     int from = (int)luaL_checkinteger(L, 2);
     int to = (int)luaL_checkinteger(L, 3);
-    if (!g_scene.reorderScript(id, from, to))
+    if (!g_scene.reorderBehavior(id, from, to))
         luaL_error(L, "reorderScript failed");
     return 0;
 }
@@ -254,6 +270,21 @@ static int l_runtime_getWorldTransform(lua_State *L)
     return 1;
 }
 
+/// `(dlx, dly)` to add to local `x`/`y` so the entity's origin moves by `(wdx, wdy)` in world space.
+static int l_runtime_worldDeltaToLocal(lua_State *L)
+{
+    uint32_t id = (uint32_t)luaL_checkinteger(L, 1);
+    float wdx = (float)luaL_checknumber(L, 2);
+    float wdy = (float)luaL_checknumber(L, 3);
+    if (!g_scene.entity(id))
+        luaL_argerror(L, 1, "invalid entity id");
+    float dlx = 0.f, dly = 0.f;
+    g_scene.worldDeltaToLocalPositionDelta(id, wdx, wdy, &dlx, &dly);
+    lua_pushnumber(L, dlx);
+    lua_pushnumber(L, dly);
+    return 2;
+}
+
 static int l_runtime_registerBehavior(lua_State *L)
 {
     const char *name = luaL_checkstring(L, 1);
@@ -284,7 +315,9 @@ void eng_scene_draw_lua_scripts(lua_State *L, Scene &scene, float totalTime)
         Affine2D wm = (it != worldMatrices.end()) ? it->second : Affine2D::identity();
         eng_draw_push_matrix(wm);
 
-        for (ScriptInstance& sc : e.scripts) {
+        for (BehaviorSlot& b : e.behaviors) {
+            if (b.isNative) continue;
+            ScriptInstance& sc = b.script;
             lua_getglobal(L, "_BEHAVIORS");
             if (lua_isnil(L, -1)) {
                 lua_pop(L, 1);
@@ -367,8 +400,10 @@ void eng_scene_draw_editor_overlays(lua_State *L, Scene &scene, float totalTime)
         auto it = worldMatrices.find(e.id);
         Affine2D wm = (it != worldMatrices.end()) ? it->second : Affine2D::identity();
         eng_draw_push_matrix(wm);
-        for (ScriptInstance &sc : e.scripts)
+        for (BehaviorSlot &b : e.behaviors)
         {
+            if (b.isNative) continue;
+            ScriptInstance &sc = b.script;
             lua_getglobal(L, "_EDITOR_BEHAVIORS");
             if (lua_isnil(L, -1))
             {
@@ -400,6 +435,40 @@ void eng_scene_draw_editor_overlays(lua_State *L, Scene &scene, float totalTime)
     });
 }
 
+void eng_scene_update_editor_behaviors(lua_State *L, Scene &scene, float dt)
+{
+    if (!eng_editor_overlays_enabled())
+        return;
+
+    // Global editor behavior update (e.g. Transform.updateWorld for selection/drag).
+    lua_getglobal(L, "_EDITOR_BEHAVIORS");
+    if (!lua_istable(L, -1))
+    {
+        lua_pop(L, 1);
+        return;
+    }
+    lua_getfield(L, -1, "Transform");
+    if (lua_istable(L, -1))
+    {
+        lua_getfield(L, -1, "updateWorld");
+        lua_remove(L, -2);
+        lua_remove(L, -2);
+        if (lua_isfunction(L, -1))
+        {
+            lua_pushnumber(L, dt);
+            if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+            {
+                SDL_Log("Lua editor Transform.updateWorld: %s", lua_tostring(L, -1));
+                lua_pop(L, 1);
+            }
+        }
+        else
+            lua_pop(L, 1);
+    }
+    else
+        lua_pop(L, 2);
+}
+
 static int l_runtime_drawBehaviors(lua_State *L)
 {
     float totalTime = (float)luaL_checknumber(L, 1);
@@ -413,7 +482,9 @@ void eng_scene_update_lua_scripts(lua_State *L, Scene &scene, float dt)
                                            {
         if (!e.active)
             return;
-        for (ScriptInstance& sc : e.scripts) {
+        for (BehaviorSlot& b : e.behaviors) {
+            if (b.isNative) continue;
+            ScriptInstance& sc = b.script;
             lua_getglobal(L, "_BEHAVIORS");
             if (lua_isnil(L, -1)) {
                 lua_pop(L, 1);
@@ -456,7 +527,9 @@ void eng_scene_keydown_lua_scripts(lua_State *L, Scene &scene, const char *key)
                                            {
         if (!e.active)
             return;
-        for (ScriptInstance& sc : e.scripts) {
+        for (BehaviorSlot& b : e.behaviors) {
+            if (b.isNative) continue;
+            ScriptInstance& sc = b.script;
             lua_getglobal(L, "_BEHAVIORS");
             if (lua_isnil(L, -1)) {
                 lua_pop(L, 1);
@@ -487,7 +560,9 @@ void eng_scene_hudplay_lua_scripts(lua_State *L, Scene &scene)
                                            {
         if (!e.active)
             return;
-        for (ScriptInstance& sc : e.scripts) {
+        for (BehaviorSlot& b : e.behaviors) {
+            if (b.isNative) continue;
+            ScriptInstance& sc = b.script;
             lua_getglobal(L, "_BEHAVIORS");
             if (lua_isnil(L, -1)) {
                 lua_pop(L, 1);
@@ -552,6 +627,8 @@ void eng_lua_register_runtime(lua_State *L)
     lua_setfield(L, -2, "setTransform");
     lua_pushcfunction(L, l_runtime_getWorldTransform, "runtime.getWorldTransform");
     lua_setfield(L, -2, "getWorldTransform");
+    lua_pushcfunction(L, l_runtime_worldDeltaToLocal, "runtime.worldDeltaToLocal");
+    lua_setfield(L, -2, "worldDeltaToLocal");
     lua_pushcfunction(L, l_runtime_forEachEntityDrawOrder, "runtime.forEachEntityDrawOrder");
     lua_setfield(L, -2, "forEachEntityDrawOrder");
     lua_setglobal(L, "runtime");

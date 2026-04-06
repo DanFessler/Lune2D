@@ -22,6 +22,10 @@ void eng_scene_draw_lua_scripts(lua_State *L, Scene &scene, float totalTime);
 /// Skipped while toolbar sim state is `playing`.
 void eng_scene_draw_editor_overlays(lua_State *L, Scene &scene, float totalTime);
 
+/// Call `updateEditor` on `_EDITOR_BEHAVIORS` (Transform.updateWorld, per-script updateEditor).
+/// Skipped while sim state is `playing`.
+void eng_scene_update_editor_behaviors(lua_State *L, Scene &scene, float dt);
+
 /// Call `keydown(id, key)` on behavior tables for entities (sorted by update order).
 void eng_scene_keydown_lua_scripts(lua_State *L, Scene &scene, const char *key);
 

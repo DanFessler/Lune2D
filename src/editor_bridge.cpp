@@ -1,11 +1,14 @@
 #include "editor_bridge.hpp"
 #include "engine/lua/behavior_schema.hpp"
+#include "engine/lua/lua_runtime.hpp"
 #include "scene.hpp"
 #include "webview_host.hpp"
 
 #include <cstdio>
 #include <string>
+#include <unordered_set>
 
+#include <lua.h>
 #include <nlohmann/json.hpp>
 
 namespace
@@ -45,35 +48,76 @@ namespace
         out.push_back('"');
     }
 
-    void appendTransformComponent(std::string &json, const Transform &t)
+    void appendBehaviorComponent(std::string &json, const BehaviorSlot &b,
+                                 const std::unordered_set<std::string> &editorPairs)
     {
-        char buf[384];
-        std::snprintf(buf, sizeof(buf),
-                      "{\"type\":\"Transform\",\"x\":%.8g,\"y\":%.8g,\"angle\":%.8g,"
-                      "\"vx\":%.8g,\"vy\":%.8g,\"sx\":%.8g,\"sy\":%.8g}",
-                      (double)t.x, (double)t.y, (double)t.angle,
-                      (double)t.vx, (double)t.vy, (double)t.sx, (double)t.sy);
-        json += buf;
-    }
+        bool hasPair = editorPairs.count(b.name) > 0;
+        const char *pairStr = hasPair ? "true" : "false";
 
-    void appendScriptComponent(std::string &json, const ScriptInstance &s)
-    {
-        nlohmann::json row = nlohmann::json::object();
-        row["type"] = "Script";
-        row["behavior"] = s.behavior;
-        row["properties"] = s.propertyOverrides;
-        row["propertyValues"] =
-            eng_behavior_merge_properties(s.behavior.c_str(), s.propertyOverrides);
-        nlohmann::json sch = eng_behavior_schema_to_editor_json(s.behavior.c_str());
-        if (!sch.is_null())
-            row["propertySchema"] = std::move(sch);
-        json += row.dump();
+        if (b.isNative && b.name == "Transform")
+        {
+            const Transform &t = b.transform;
+            char buf[600];
+            std::snprintf(buf, sizeof(buf),
+                          "{\"type\":\"Behavior\",\"name\":\"Transform\",\"isNative\":true,"
+                          "\"hasEditorPair\":%s,"
+                          "\"propertyValues\":{\"x\":%.8g,\"y\":%.8g,\"angle\":%.8g,"
+                          "\"vx\":%.8g,\"vy\":%.8g,\"sx\":%.8g,\"sy\":%.8g},"
+                          "\"propertySchema\":["
+                          "{\"name\":\"x\",\"type\":\"number\"},"
+                          "{\"name\":\"y\",\"type\":\"number\"},"
+                          "{\"name\":\"angle\",\"type\":\"number\"},"
+                          "{\"name\":\"vx\",\"type\":\"number\"},"
+                          "{\"name\":\"vy\",\"type\":\"number\"},"
+                          "{\"name\":\"sx\",\"type\":\"number\"},"
+                          "{\"name\":\"sy\",\"type\":\"number\"}"
+                          "]}",
+                          pairStr,
+                          (double)t.x, (double)t.y, (double)t.angle,
+                          (double)t.vx, (double)t.vy, (double)t.sx, (double)t.sy);
+            json += buf;
+        }
+        else if (!b.isNative)
+        {
+            nlohmann::json row = nlohmann::json::object();
+            row["type"] = "Behavior";
+            row["name"] = b.name;
+            row["isNative"] = false;
+            row["hasEditorPair"] = hasPair;
+            row["properties"] = b.script.propertyOverrides;
+            row["propertyValues"] =
+                eng_behavior_merge_properties(b.script.behavior.c_str(), b.script.propertyOverrides);
+            nlohmann::json sch = eng_behavior_schema_to_editor_json(b.script.behavior.c_str());
+            if (!sch.is_null())
+                row["propertySchema"] = std::move(sch);
+            json += row.dump();
+        }
     }
 
 } // namespace
 
+static std::unordered_set<std::string> collectEditorBehaviorNames()
+{
+    std::unordered_set<std::string> out;
+    lua_State *L = g_eng_lua_vm;
+    if (!L) return out;
+    lua_getglobal(L, "_EDITOR_BEHAVIORS");
+    if (!lua_istable(L, -1)) { lua_pop(L, 1); return out; }
+    lua_pushnil(L);
+    while (lua_next(L, -2) != 0)
+    {
+        if (lua_type(L, -2) == LUA_TSTRING)
+            out.insert(lua_tostring(L, -2));
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    return out;
+}
+
 void editor_bridge_publish_scene_snapshot(const Scene &scene)
 {
+    auto editorPairs = collectEditorBehaviorNames();
+
     std::string json = "[";
     bool firstEntity = true;
     const auto sorted = scene.entitiesSortedById();
@@ -109,11 +153,13 @@ void editor_bridge_publish_scene_snapshot(const Scene &scene)
         }
         json += ",\"components\":[";
 
-        appendTransformComponent(json, e.transform);
-        for (const ScriptInstance &sc : e.scripts)
+        bool firstComp = true;
+        for (const BehaviorSlot &b : e.behaviors)
         {
-            json += ',';
-            appendScriptComponent(json, sc);
+            if (!firstComp)
+                json += ',';
+            firstComp = false;
+            appendBehaviorComponent(json, b, editorPairs);
         }
 
         json += "]}";

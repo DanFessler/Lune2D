@@ -7,11 +7,15 @@ struct lua_State;
 
 /// Create a Lua VM with all engine APIs and auto-discovered behaviors.
 /// Does not load or execute any game script.
-lua_State *eng_create_lua_vm(const std::string &luaBaseDir);
+/// @param engineLuaDir Absolute path to engine Luau root (contains `editor/*.lua`).
+/// @param projectLuaDir Absolute path to the loaded game project (contains `behaviors/`, `game/`, …).
+lua_State *eng_create_lua_vm(const std::string &engineLuaDir, const std::string &projectLuaDir);
 
 /// Clear `package.loaded` behavior modules, replace `_BEHAVIORS`, rescan `behaviors/*.lua`.
 /// Keeps the same `lua_State` and does not reset the Scene.
-void eng_reload_behaviors(lua_State *L, const std::string &luaBaseDir);
+void eng_reload_behaviors(lua_State *L,
+                          const std::string &engineLuaDir,
+                          const std::string &projectLuaDir);
 
 bool eng_lua_call(lua_State *L, const char *fn, int nargs, int nret);
 

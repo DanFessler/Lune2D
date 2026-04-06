@@ -11,15 +11,13 @@ import { createPortal } from "react-dom";
 import { RgbaColorPicker } from "react-colorful";
 import type { RgbaColor } from "react-colorful";
 import type {
+  BehaviorComponent,
   BehaviorPropertyField,
   EngineEntity,
-  ScriptComponent,
-  TransformComponent,
 } from "../../engineBridge";
-import { getEntityTransform } from "../../engineBridge";
 import { engine } from "../../engineProxy";
 import { PiBoundingBoxFill } from "react-icons/pi";
-import { FaCode, FaTimes } from "react-icons/fa";
+import { FaCode, FaCog, FaTimes } from "react-icons/fa";
 import {
   DndContext,
   closestCorners,
@@ -85,6 +83,8 @@ function CollapsibleBlock({
   onRemove,
   sortableActivatorRef,
   sortableListeners,
+  behaviorKind,
+  hasEditorPair,
   children,
 }: {
   name: string;
@@ -95,15 +95,18 @@ function CollapsibleBlock({
   onFold: (collapsed: boolean) => void;
   onToggleActive?: () => void;
   onRemove?: () => void;
-  /** When set with sortableListeners, dnd-kit drag only starts from this header (not property fields). */
   sortableActivatorRef?: (element: HTMLElement | null) => void;
   sortableListeners?: DraggableSyntheticListeners;
+  behaviorKind?: "engine" | "user";
+  hasEditorPair?: boolean;
   children: ReactNode;
 }) {
   return (
     <div
       className={styles.behaviorContainer}
       style={{ boxShadow: "0 -1px 0 rgba(0, 0, 0, 0.1)" }}
+      data-behavior-kind={behaviorKind}
+      data-has-editor-pair={hasEditorPair != null ? String(hasEditorPair) : undefined}
     >
       <div
         ref={sortableActivatorRef ?? undefined}
@@ -122,6 +125,12 @@ function CollapsibleBlock({
         />
         {icon}
         <div>{name}</div>
+        {behaviorKind === "engine" ? (
+          <span className={styles.engineBadge} title="Engine behavior">E</span>
+        ) : null}
+        {hasEditorPair ? (
+          <span className={styles.editorPairBadge} title="Has editor behavior">✎</span>
+        ) : null}
         <div className={styles.spacer} />
         {onRemove ? (
           <button
@@ -235,12 +244,12 @@ function EditableFloat({
 
 function BehaviorBoolRow({
   entityId,
-  scriptIndex,
+  behaviorIndex,
   field,
   value,
 }: {
   entityId: number;
-  scriptIndex: number;
+  behaviorIndex: number;
   field: BehaviorPropertyField;
   value: unknown;
 }) {
@@ -258,7 +267,7 @@ function BehaviorBoolRow({
           onChange={(e) => {
             void engine.runtime.setScriptProperty(
               entityId,
-              scriptIndex,
+              behaviorIndex,
               field.name,
               e.target.checked,
             );
@@ -292,12 +301,12 @@ function clampColorPopoverPosition(
 
 function BehaviorColorRow({
   entityId,
-  scriptIndex,
+  behaviorIndex,
   field,
   value,
 }: {
   entityId: number;
-  scriptIndex: number;
+  behaviorIndex: number;
   field: BehaviorPropertyField;
   value: unknown;
 }) {
@@ -308,7 +317,6 @@ function BehaviorColorRow({
   );
 
   const [open, setOpen] = useState(false);
-  /** While the popover is open, drive the picker from local state only so bridge round-trips don't fight the drag. */
   const [pickerColor, setPickerColor] = useState<RgbaColor>(fromProps);
   useEffect(() => {
     if (open) return;
@@ -364,14 +372,14 @@ function BehaviorColorRow({
 
   const pushColorToEngine = useCallback(
     (c: RgbaColor) => {
-      void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, [
+      void engine.runtime.setScriptProperty(entityId, behaviorIndex, field.name, [
         Math.max(0, Math.min(255, Math.round(c.r))),
         Math.max(0, Math.min(255, Math.round(c.g))),
         Math.max(0, Math.min(255, Math.round(c.b))),
         Math.max(0, Math.min(255, Math.round(c.a * 255))),
       ]);
     },
-    [entityId, scriptIndex, field.name],
+    [entityId, behaviorIndex, field.name],
   );
 
   const onPickerChange = useCallback(
@@ -443,12 +451,12 @@ function BehaviorColorRow({
 
 function BehaviorNumberRow({
   entityId,
-  scriptIndex,
+  behaviorIndex,
   field,
   value,
 }: {
   entityId: number;
-  scriptIndex: number;
+  behaviorIndex: number;
   field: BehaviorPropertyField;
   value: unknown;
 }) {
@@ -469,7 +477,7 @@ function BehaviorNumberRow({
     if (field.min !== undefined) v = Math.max(field.min, v);
     if (field.max !== undefined) v = Math.min(field.max, v);
     if (field.type === "integer") v = Math.round(v);
-    void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, v);
+    void engine.runtime.setScriptProperty(entityId, behaviorIndex, field.name, v);
   };
 
   const useSlider =
@@ -484,7 +492,7 @@ function BehaviorNumberRow({
     if (field.max !== undefined) x = Math.min(field.max, x);
     if (field.type === "integer") x = Math.round(x);
     setLocal(String(x));
-    void engine.runtime.setScriptProperty(entityId, scriptIndex, field.name, x);
+    void engine.runtime.setScriptProperty(entityId, behaviorIndex, field.name, x);
   };
 
   if (useSlider) {
@@ -544,12 +552,12 @@ function BehaviorNumberRow({
 
 function BehaviorEnumRow({
   entityId,
-  scriptIndex,
+  behaviorIndex,
   field,
   value,
 }: {
   entityId: number;
-  scriptIndex: number;
+  behaviorIndex: number;
   field: BehaviorPropertyField;
   value: unknown;
 }) {
@@ -564,7 +572,7 @@ function BehaviorEnumRow({
         onChange={(e) => {
           void engine.runtime.setScriptProperty(
             entityId,
-            scriptIndex,
+            behaviorIndex,
             field.name,
             e.target.value,
           );
@@ -582,12 +590,12 @@ function BehaviorEnumRow({
 
 function BehaviorStringRow({
   entityId,
-  scriptIndex,
+  behaviorIndex,
   field,
   value,
 }: {
   entityId: number;
-  scriptIndex: number;
+  behaviorIndex: number;
   field: BehaviorPropertyField;
   value: unknown;
 }) {
@@ -603,7 +611,7 @@ function BehaviorStringRow({
     if (local !== v)
       void engine.runtime.setScriptProperty(
         entityId,
-        scriptIndex,
+        behaviorIndex,
         field.name,
         local,
       );
@@ -625,12 +633,12 @@ function BehaviorStringRow({
 
 function BehaviorJsonRow({
   entityId,
-  scriptIndex,
+  behaviorIndex,
   field,
   value,
 }: {
   entityId: number;
-  scriptIndex: number;
+  behaviorIndex: number;
   field: BehaviorPropertyField;
   value: unknown;
 }) {
@@ -660,7 +668,7 @@ function BehaviorJsonRow({
         const parsed = JSON.parse(local) as unknown;
         void engine.runtime.setScriptProperty(
           entityId,
-          scriptIndex,
+          behaviorIndex,
           field.name,
           parsed as never,
         );
@@ -671,7 +679,7 @@ function BehaviorJsonRow({
     }
     void engine.runtime.setScriptProperty(
       entityId,
-      scriptIndex,
+      behaviorIndex,
       field.name,
       local,
     );
@@ -693,7 +701,7 @@ function BehaviorJsonRow({
 
 function BehaviorPropertyRow(props: {
   entityId: number;
-  scriptIndex: number;
+  behaviorIndex: number;
   field: BehaviorPropertyField;
   value: unknown;
 }) {
@@ -715,23 +723,62 @@ function BehaviorPropertyRow(props: {
 
 function BehaviorPropertyEditor({
   entityId,
-  scriptIndex,
+  behaviorIndex,
   comp,
 }: {
   entityId: number;
-  scriptIndex: number;
-  comp: ScriptComponent;
+  behaviorIndex: number;
+  comp: BehaviorComponent;
 }) {
   const fields = comp.propertySchema;
   const vals = comp.propertyValues ?? {};
   if (!fields?.length) return null;
+
+  // For Transform behavior, use setTransform instead of setScriptProperty.
+  if (comp.isNative && comp.name === "Transform") {
+    return (
+      <>
+        {fields.map((f) => {
+          const val = vals[f.name] !== undefined ? vals[f.name] : f.default;
+          const numVal = typeof val === "number" ? val : Number(val) || 0;
+          // Group position/velocity as vec2, angle as float.
+          if (f.name === "x" || f.name === "vx" || f.name === "sx") {
+            const yField = f.name === "x" ? "y" : f.name === "vx" ? "vy" : "sy";
+            const yVal = vals[yField] !== undefined ? vals[yField] : 0;
+            const yNum = typeof yVal === "number" ? yVal : Number(yVal) || 0;
+            const label = f.name === "x" ? "Position" : f.name === "vx" ? "Velocity" : "Scale";
+            return (
+              <EditableVec2
+                key={f.name}
+                label={label}
+                x={numVal}
+                y={yNum}
+                onCommitX={(v) => engine.runtime.setTransform(entityId, f.name, v)}
+                onCommitY={(v) => engine.runtime.setTransform(entityId, yField, v)}
+              />
+            );
+          }
+          if (f.name === "y" || f.name === "vy" || f.name === "sy") return null;
+          return (
+            <EditableFloat
+              key={f.name}
+              label={f.name.charAt(0).toUpperCase() + f.name.slice(1)}
+              value={numVal}
+              onCommit={(v) => engine.runtime.setTransform(entityId, f.name, v)}
+            />
+          );
+        })}
+      </>
+    );
+  }
+
   return (
     <>
       {fields.map((f) => (
         <BehaviorPropertyRow
           key={f.name}
           entityId={entityId}
-          scriptIndex={scriptIndex}
+          behaviorIndex={behaviorIndex}
           field={f}
           value={vals[f.name] !== undefined ? vals[f.name] : f.default}
         />
@@ -740,37 +787,7 @@ function BehaviorPropertyEditor({
   );
 }
 
-function TransformFields({
-  t,
-  entityId,
-}: {
-  t: TransformComponent;
-  entityId: number;
-}) {
-  const set = (field: string) => (v: number) =>
-    engine.runtime.setTransform(entityId, field, v);
-  return (
-    <>
-      <EditableVec2
-        label="Position"
-        x={t.x}
-        y={t.y}
-        onCommitX={set("x")}
-        onCommitY={set("y")}
-      />
-      <EditableFloat label="Angle" value={t.angle} onCommit={set("angle")} />
-      <EditableVec2
-        label="Velocity"
-        x={t.vx}
-        y={t.vy}
-        onCommitX={set("vx")}
-        onCommitY={set("vy")}
-      />
-    </>
-  );
-}
-
-function ScriptList({
+function BehaviorList({
   entity,
   collapseMap,
   onFold,
@@ -782,30 +799,32 @@ function ScriptList({
   const entityId = Number(entity.id);
   const [activeChildren, setActiveChildren] = useState<ReactNode | null>(null);
 
-  const scriptComponents = entity.components
+  const behaviorEntries = entity.components
     .map((c, i) => ({ comp: c, idx: i }))
-    .filter((x) => x.comp.type === "Script");
+    .filter((x): x is { comp: BehaviorComponent; idx: number } => x.comp.type === "Behavior");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
   );
 
-  const scriptIds = scriptComponents.map((_, i) => `script-${i}`);
+  const behaviorIds = behaviorEntries.map((_, i) => `behavior-${i}`);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
     if (active.id !== over.id) {
-      const fromIdx = scriptIds.indexOf(String(active.id));
-      const toIdx = scriptIds.indexOf(String(over.id));
+      const fromIdx = behaviorIds.indexOf(String(active.id));
+      const toIdx = behaviorIds.indexOf(String(over.id));
       if (fromIdx >= 0 && toIdx >= 0) {
-        engine.runtime.reorderScript(entityId, fromIdx, toIdx);
+        const fromBehIdx = behaviorEntries[fromIdx].idx;
+        const toBehIdx = behaviorEntries[toIdx].idx;
+        engine.runtime.reorderScript(entityId, fromBehIdx, toBehIdx);
       }
     }
     setActiveChildren(null);
   }
 
-  if (scriptComponents.length === 0) return null;
+  if (behaviorEntries.length === 0) return null;
 
   return (
     <DndContext
@@ -818,31 +837,39 @@ function ScriptList({
       onDragCancel={() => setActiveChildren(null)}
       modifiers={[restrictToVerticalAxis]}
     >
-      <SortableContext items={scriptIds} strategy={verticalListSortingStrategy}>
-        {scriptComponents.map((sc, i) => {
-          if (sc.comp.type !== "Script") return null;
-          const key = `script:${i}:${sc.comp.behavior}`;
+      <SortableContext items={behaviorIds} strategy={verticalListSortingStrategy}>
+        {behaviorEntries.map((entry, i) => {
+          const comp = entry.comp;
+          const behIdx = entry.idx;
+          const isEngine = comp.isNative;
+          const key = `behavior:${i}:${comp.name}`;
+          const icon = isEngine
+            ? <PiBoundingBoxFill style={{ width: "14px", height: "14px" }} />
+            : <FaCode style={{ width: "14px", height: "14px" }} />;
+
           const propertyBody =
-            sc.comp.propertySchema && sc.comp.propertySchema.length > 0 ? (
+            comp.propertySchema && comp.propertySchema.length > 0 ? (
               <BehaviorPropertyEditor
                 entityId={entityId}
-                scriptIndex={i}
-                comp={sc.comp}
+                behaviorIndex={behIdx}
+                comp={comp}
               />
             ) : (
               <span
                 className={styles.fieldLabel}
                 style={{ gridColumn: "1 / -1" }}
               >
-                Luau behavior (add{" "}
-                <code>properties = defineProperties {"{ ... }"}</code> to expose
-                fields)
+                {isEngine
+                  ? "Engine behavior"
+                  : <>Luau behavior (add{" "}
+                    <code>properties = defineProperties {"{ ... }"}</code> to expose
+                    fields)</>}
               </span>
             );
           const dragOverlay = (
             <CollapsibleBlock
-              name={sc.comp.behavior}
-              icon={<FaCode style={{ width: "14px", height: "14px" }} />}
+              name={comp.name}
+              icon={icon}
               canDisable={false}
               active={true}
               isCollapsed={false}
@@ -854,22 +881,24 @@ function ScriptList({
           );
           return (
             <SortableItem
-              key={scriptIds[i]}
-              id={scriptIds[i]}
+              key={behaviorIds[i]}
+              id={behaviorIds[i]}
               data={{ type: "behavior" }}
               dragOverlay={dragOverlay}
             >
               {(handle) => (
                 <CollapsibleBlock
-                  name={sc.comp.behavior}
-                  icon={<FaCode style={{ width: "14px", height: "14px" }} />}
+                  name={comp.name}
+                  icon={icon}
                   canDisable={false}
                   active={true}
                   isCollapsed={collapseMap[key] ?? false}
                   onFold={(c) => onFold(key, c)}
-                  onRemove={() => engine.runtime.removeScript(entityId, i)}
+                  onRemove={isEngine ? undefined : () => engine.runtime.removeScript(entityId, behIdx)}
                   sortableActivatorRef={handle.setActivatorNodeRef}
                   sortableListeners={handle.listeners}
+                  behaviorKind={isEngine ? "engine" : "user"}
+                  hasEditorPair={comp.hasEditorPair}
                 >
                   {propertyBody}
                 </CollapsibleBlock>
@@ -900,7 +929,6 @@ export default function EngineInspector({
 }: {
   entity: EngineEntity | null;
 }) {
-  const transform = entity ? getEntityTransform(entity) : null;
   const entityId = entity ? Number(entity.id) : 0;
 
   const [localName, setLocalName] = useState(entity?.name ?? "");
@@ -914,18 +942,15 @@ export default function EngineInspector({
 
   const foldKeysSig = useMemo(() => {
     const parts: string[] = [];
-    if (transform) parts.push("__transform");
     if (entity) {
-      let si = 0;
-      for (const c of entity.components) {
-        if (c.type === "Script") {
-          parts.push(`script:${si}:${c.behavior}`);
-          si++;
+      entity.components.forEach((c, i) => {
+        if (c.type === "Behavior") {
+          parts.push(`behavior:${i}:${c.name}`);
         }
-      }
+      });
     }
     return parts.join("\0");
-  }, [entity, transform]);
+  }, [entity]);
   const { collapseMap, handleFold } = useComponentCollapseMap(foldKeysSig);
 
   if (!entity) {
@@ -973,21 +998,7 @@ export default function EngineInspector({
           minHeight: 0,
         }}
       >
-        {transform ? (
-          <CollapsibleBlock
-            name="Transform"
-            icon={
-              <PiBoundingBoxFill style={{ width: "14px", height: "14px" }} />
-            }
-            canDisable={false}
-            active={true}
-            isCollapsed={collapseMap["__transform"] ?? false}
-            onFold={(c) => handleFold("__transform", c)}
-          >
-            <TransformFields t={transform} entityId={entityId} />
-          </CollapsibleBlock>
-        ) : null}
-        <ScriptList
+        <BehaviorList
           entity={entity}
           collapseMap={collapseMap}
           onFold={handleFold}

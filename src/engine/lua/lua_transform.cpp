@@ -16,25 +16,27 @@ const char* eng_lua_transform_typename() {
 
 static int l_transform_index(lua_State* L) {
     auto* u         = (EngTransformUdata*)luaL_checkudata(L, 1, kTransformUdataType);
-    const Entity* e = g_scene.entity(u->entityId);
+    Entity* e = g_scene.entity(u->entityId);
     if (!e)
         luaL_error(L, "Transform: entity no longer exists");
-    const char*     k = luaL_checkstring(L, 2);
-    const Transform t = e->transform;
+    const Transform *t = e->getTransform();
+    if (!t)
+        luaL_error(L, "Transform: entity has no Transform behavior");
+    const char *k = luaL_checkstring(L, 2);
     if (!std::strcmp(k, "x"))
-        lua_pushnumber(L, t.x);
+        lua_pushnumber(L, t->x);
     else if (!std::strcmp(k, "y"))
-        lua_pushnumber(L, t.y);
+        lua_pushnumber(L, t->y);
     else if (!std::strcmp(k, "angle"))
-        lua_pushnumber(L, t.angle);
+        lua_pushnumber(L, t->angle);
     else if (!std::strcmp(k, "vx"))
-        lua_pushnumber(L, t.vx);
+        lua_pushnumber(L, t->vx);
     else if (!std::strcmp(k, "vy"))
-        lua_pushnumber(L, t.vy);
+        lua_pushnumber(L, t->vy);
     else if (!std::strcmp(k, "sx"))
-        lua_pushnumber(L, t.sx);
+        lua_pushnumber(L, t->sx);
     else if (!std::strcmp(k, "sy"))
-        lua_pushnumber(L, t.sy);
+        lua_pushnumber(L, t->sy);
     else
         luaL_error(L, "invalid Transform field");
     return 1;
@@ -45,23 +47,25 @@ static int l_transform_newindex(lua_State* L) {
     Entity* e = g_scene.entity(u->entityId);
     if (!e)
         luaL_error(L, "Transform: entity no longer exists");
+    Transform *t = e->getTransform();
+    if (!t)
+        luaL_error(L, "Transform: entity has no Transform behavior");
     const char* k = luaL_checkstring(L, 2);
     float       v = (float)luaL_checknumber(L, 3);
-    Transform&  t = e->transform;
     if (!std::strcmp(k, "x"))
-        t.x = v;
+        t->x = v;
     else if (!std::strcmp(k, "y"))
-        t.y = v;
+        t->y = v;
     else if (!std::strcmp(k, "angle"))
-        t.angle = v;
+        t->angle = v;
     else if (!std::strcmp(k, "vx"))
-        t.vx = v;
+        t->vx = v;
     else if (!std::strcmp(k, "vy"))
-        t.vy = v;
+        t->vy = v;
     else if (!std::strcmp(k, "sx"))
-        t.sx = v;
+        t->sx = v;
     else if (!std::strcmp(k, "sy"))
-        t.sy = v;
+        t->sy = v;
     else
         luaL_error(L, "invalid Transform field");
     return 0;

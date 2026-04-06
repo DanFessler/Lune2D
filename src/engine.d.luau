@@ -59,6 +59,16 @@ declare app: {
 declare editor: {
 	playState: () -> "stopped" | "playing" | "paused",
 	getSelectedEntityId: () -> number,
+	setSelectedEntity: (id: number?) -> (),
+	pickEntityAt: (x: number, y: number, hitRadius: number?) -> number,
+}
+
+-- Editor-time mouse input polling (Luau-space coordinates).
+declare editorInput: {
+	mousePosition: () -> { x: number, y: number },
+	mouseDown: (button: number) -> boolean,
+	mousePressed: (button: number) -> boolean,
+	mouseReleased: (button: number) -> boolean,
 }
 
 -- Scene + script host API (game-facing facade).
@@ -75,6 +85,8 @@ declare runtime: {
 	setActive: (entityId: number, active: boolean) -> (),
 	getTransform: (entityId: number) -> TransformHandle,
 	getWorldTransform: (entityId: number) -> WorldTransform,
+	-- World-space translation (dx,dy) -> local position deltas to add to Transform x/y (parent space).
+	worldDeltaToLocal: (entityId: number, worldDx: number, worldDy: number) -> (number, number),
 	forEachEntityDrawOrder: ((entityId: number) -> ()) -> (),
 	registerBehavior: (name: string, desc: BehaviorDesc) -> (),
 	drawBehaviors: (totalTime: number) -> (),

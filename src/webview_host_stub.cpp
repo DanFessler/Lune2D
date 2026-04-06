@@ -40,7 +40,9 @@ void webview_host_publish_entities_json(const char * /*json_utf8*/) {}
 
 void webview_host_notify_selected_entity(std::uint32_t /*entity_id*/) {}
 
-void webview_host_set_lua_workspace(const char * /*lua_dir_abs_utf8*/) {}
+void webview_host_set_lua_workspace(const char * /*project_lua_dir_abs_utf8*/) {}
+
+void webview_host_set_lua_engine_workspace(const char * /*engine_lua_dir_abs_utf8*/) {}
 
 void webview_host_set_script_controls(void (* /*on_reload_request*/)(void),
                                       void (* /*on_set_paused*/)(bool),

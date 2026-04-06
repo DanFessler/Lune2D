@@ -3,6 +3,7 @@
 #include <luacode.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -17,10 +18,13 @@ static int l_require(lua_State* L) {
         return 1;
     lua_pop(L, 1);
 
-    lua_getfield(L, -2, "basepath");
+    const bool useEnginePath =
+        std::strncmp(modname, "editor/", 7) == 0;
+    lua_getfield(L, -2, useEnginePath ? "enginepath" : "basepath");
     const char* base = lua_tostring(L, -1);
     if (!base)
-        luaL_error(L, "package.basepath not set");
+        luaL_error(L,
+                   useEnginePath ? "package.enginepath not set" : "package.basepath not set");
     std::string path = std::string(base) + modname + ".lua";
     lua_pop(L, 1);
 

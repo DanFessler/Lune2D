@@ -19,24 +19,47 @@ void applyEntityJson(Scene& scene, uint32_t id, const json& ent) {
     if (ent.contains("active") && !ent["active"].get<bool>())
         scene.setActive(id, false);
 
+    // Backward-compat: old format has "transform" as a separate object.
     if (ent.contains("transform") && ent["transform"].is_object()) {
+        scene.addBehavior(id, "Transform", true);
         const auto& t = ent["transform"];
-        if (t.contains("x"))
-            scene.setTransformField(id, "x", t["x"].get<float>());
-        if (t.contains("y"))
-            scene.setTransformField(id, "y", t["y"].get<float>());
-        if (t.contains("angle"))
-            scene.setTransformField(id, "angle", t["angle"].get<float>());
-        if (t.contains("vx"))
-            scene.setTransformField(id, "vx", t["vx"].get<float>());
-        if (t.contains("vy"))
-            scene.setTransformField(id, "vy", t["vy"].get<float>());
-        if (t.contains("sx"))
-            scene.setTransformField(id, "sx", t["sx"].get<float>());
-        if (t.contains("sy"))
-            scene.setTransformField(id, "sy", t["sy"].get<float>());
+        if (t.contains("x"))     scene.setTransformField(id, "x",     t["x"].get<float>());
+        if (t.contains("y"))     scene.setTransformField(id, "y",     t["y"].get<float>());
+        if (t.contains("angle")) scene.setTransformField(id, "angle", t["angle"].get<float>());
+        if (t.contains("vx"))    scene.setTransformField(id, "vx",    t["vx"].get<float>());
+        if (t.contains("vy"))    scene.setTransformField(id, "vy",    t["vy"].get<float>());
+        if (t.contains("sx"))    scene.setTransformField(id, "sx",    t["sx"].get<float>());
+        if (t.contains("sy"))    scene.setTransformField(id, "sy",    t["sy"].get<float>());
     }
 
+    // New format: "behaviors" array with unified behavior entries.
+    if (ent.contains("behaviors") && ent["behaviors"].is_array()) {
+        for (const auto& b : ent["behaviors"]) {
+            if (!b.is_object() || !b.contains("name") || !b["name"].is_string())
+                continue;
+            std::string name = b["name"].get<std::string>();
+            bool isNative = b.value("isNative", false);
+            if (isNative && name == "Transform") {
+                scene.addBehavior(id, "Transform", true);
+                if (b.contains("properties") && b["properties"].is_object()) {
+                    const auto& p = b["properties"];
+                    if (p.contains("x"))     scene.setTransformField(id, "x",     p["x"].get<float>());
+                    if (p.contains("y"))     scene.setTransformField(id, "y",     p["y"].get<float>());
+                    if (p.contains("angle")) scene.setTransformField(id, "angle", p["angle"].get<float>());
+                    if (p.contains("vx"))    scene.setTransformField(id, "vx",    p["vx"].get<float>());
+                    if (p.contains("vy"))    scene.setTransformField(id, "vy",    p["vy"].get<float>());
+                    if (p.contains("sx"))    scene.setTransformField(id, "sx",    p["sx"].get<float>());
+                    if (p.contains("sy"))    scene.setTransformField(id, "sy",    p["sy"].get<float>());
+                }
+            } else {
+                json props = b.value("properties", json::object());
+                if (!props.is_object()) props = json::object();
+                scene.addScript(id, name.c_str(), props);
+            }
+        }
+    }
+
+    // Legacy "scripts" array (backward-compat).
     if (ent.contains("scripts") && ent["scripts"].is_array()) {
         for (const auto& s : ent["scripts"]) {
             if (s.is_string())
@@ -138,28 +161,64 @@ bool eng_save_scene(const Scene& scene, const std::string& jsonPath) {
             ent["active"] = false;
         if (e.parentId != 0)
             ent["parentId"] = e.parentId;
-        json tf;
-        tf["x"]     = e.transform.x;
-        tf["y"]     = e.transform.y;
-        tf["angle"] = e.transform.angle;
-        tf["vx"]    = e.transform.vx;
-        tf["vy"]    = e.transform.vy;
-        tf["sx"]    = e.transform.sx;
-        tf["sy"]    = e.transform.sy;
-        ent["transform"] = tf;
+
+        // Save using the new "behaviors" array format.
+        json behaviors = json::array();
+        for (const auto& b : e.behaviors) {
+            json slot;
+            slot["name"] = b.name;
+            if (b.isNative) {
+                slot["isNative"] = true;
+                if (b.name == "Transform") {
+                    json props;
+                    props["x"]     = b.transform.x;
+                    props["y"]     = b.transform.y;
+                    props["angle"] = b.transform.angle;
+                    props["vx"]    = b.transform.vx;
+                    props["vy"]    = b.transform.vy;
+                    props["sx"]    = b.transform.sx;
+                    props["sy"]    = b.transform.sy;
+                    slot["properties"] = props;
+                }
+            } else {
+                json saveProps = eng_behavior_overrides_for_save(b.script.behavior.c_str(),
+                                                                 b.script.propertyOverrides);
+                if (!saveProps.empty())
+                    slot["properties"] = saveProps;
+            }
+            behaviors.push_back(slot);
+        }
+        ent["behaviors"] = behaviors;
+
+        // Also write legacy "transform" and "scripts" fields for backward compat during transition.
+        const Transform *t = e.getTransform();
+        if (t) {
+            json tf;
+            tf["x"]     = t->x;
+            tf["y"]     = t->y;
+            tf["angle"] = t->angle;
+            tf["vx"]    = t->vx;
+            tf["vy"]    = t->vy;
+            tf["sx"]    = t->sx;
+            tf["sy"]    = t->sy;
+            ent["transform"] = tf;
+        }
         json scripts = json::array();
-        for (const auto& s : e.scripts) {
-            json saveProps = eng_behavior_overrides_for_save(s.behavior.c_str(), s.propertyOverrides);
+        for (const auto& b : e.behaviors) {
+            if (b.isNative) continue;
+            json saveProps = eng_behavior_overrides_for_save(b.script.behavior.c_str(),
+                                                             b.script.propertyOverrides);
             if (saveProps.empty())
-                scripts.push_back(s.behavior);
+                scripts.push_back(b.script.behavior);
             else {
-                json slot;
-                slot["behavior"]   = s.behavior;
-                slot["properties"] = saveProps;
-                scripts.push_back(slot);
+                json s;
+                s["behavior"]   = b.script.behavior;
+                s["properties"] = saveProps;
+                scripts.push_back(s);
             }
         }
         ent["scripts"] = scripts;
+
         arr.push_back(ent);
     }
     doc["entities"] = arr;

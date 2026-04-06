@@ -12,6 +12,7 @@ void eng_lua_register_app(lua_State *L);
 void eng_lua_register_runtime(lua_State *L);
 void eng_lua_register_require(lua_State *L);
 void eng_lua_register_editor(lua_State *L);
+void eng_lua_register_editor_input(lua_State *L);
 
 void eng_lua_register_apis(lua_State *L)
 {
@@ -30,5 +31,6 @@ void eng_lua_register_apis(lua_State *L)
     eng_lua_register_transform_metatable(L);
     eng_lua_register_runtime(L);
     eng_lua_register_editor(L);
+    eng_lua_register_editor_input(L);
     eng_lua_register_require(L);
 }

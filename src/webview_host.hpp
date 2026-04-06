@@ -78,8 +78,12 @@ void webview_host_publish_entities_json(const char *json_utf8);
 // Calls window.__engineSelectEntity(id) with a numeric id, or null when id == 0. Stub is a no-op.
 void webview_host_notify_selected_entity(std::uint32_t entity_id);
 
-// Absolute path to the directory containing *.lua scripts (e.g. ".../lua").
-void webview_host_set_lua_workspace(const char *lua_dir_abs_utf8);
+// Absolute path to the loaded game project root (behaviors/, game/, scenes/, entities.lua).
+void webview_host_set_lua_workspace(const char *project_lua_dir_abs_utf8);
+
+/// Absolute path to engine-bundled Luau (directory that contains `editor/`). Used for listing and
+/// saving `editor/*.lua` while `webview_host_set_lua_workspace` targets the game project.
+void webview_host_set_lua_engine_workspace(const char *engine_lua_dir_abs_utf8);
 
 // Host callbacks for the JS "engineScript" bridge (Lua editor tooling). Stubs are no-ops.
 void webview_host_set_script_controls(void (*on_reload_request)(void),
@@ -89,7 +93,7 @@ void webview_host_set_script_controls(void (*on_reload_request)(void),
 /// Runs synchronously when the web UI sends `reloadBehaviors` (before the ACK). No-op if unset.
 void webview_host_set_behaviors_reload_fn(void (*reload_fn)(void));
 
-/// macOS: default directory for Save Scene As (`…/lua/scenes`). Stubs ignore.
+/// macOS: default directory for Save Scene As (`…/<project>/scenes`). Stubs ignore.
 void webview_host_set_macos_scenes_directory_for_save_panel(const char *scenes_dir_abs_utf8);
 
 /// macOS: File menu (Save Scene ⌘S, Save Scene As… ⇧⌘S) and app Quit (⌘Q). Stubs are no-ops.

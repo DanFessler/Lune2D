@@ -248,7 +248,9 @@ static void eng_prime_behavior_property_globals(lua_State *L)
     }
 }
 
-void eng_reload_behaviors(lua_State *L, const std::string &luaBaseDir)
+void eng_reload_behaviors(lua_State *L,
+                          const std::string &engineLuaDir,
+                          const std::string &projectLuaDir)
 {
     g_registered_behaviors.clear();
     eng_behavior_schema_clear();
@@ -284,18 +286,24 @@ void eng_reload_behaviors(lua_State *L, const std::string &luaBaseDir)
     lua_newtable(L);
     lua_setglobal(L, "_EDITOR_BEHAVIORS");
 
-    std::string baseDir = luaBaseDir;
-    if (!baseDir.empty() && baseDir.back() != '/')
-        baseDir += '/';
-    eng_load_behaviors(L, baseDir + "behaviors/");
-    eng_load_editor_behaviors(L, baseDir + "editor/");
+    std::string engineDir = engineLuaDir;
+    if (!engineDir.empty() && engineDir.back() != '/')
+        engineDir += '/';
+    std::string projectDir = projectLuaDir;
+    if (!projectDir.empty() && projectDir.back() != '/')
+        projectDir += '/';
+    eng_load_behaviors(L, projectDir + "behaviors/");
+    eng_load_editor_behaviors(L, engineDir + "editor/");
 }
 
-lua_State *eng_create_lua_vm(const std::string &luaBaseDir)
+lua_State *eng_create_lua_vm(const std::string &engineLuaDir, const std::string &projectLuaDir)
 {
-    std::string baseDir = luaBaseDir;
-    if (!baseDir.empty() && baseDir.back() != '/')
-        baseDir += '/';
+    std::string engineDir = engineLuaDir;
+    if (!engineDir.empty() && engineDir.back() != '/')
+        engineDir += '/';
+    std::string projectDir = projectLuaDir;
+    if (!projectDir.empty() && projectDir.back() != '/')
+        projectDir += '/';
 
     g_registered_behaviors.clear();
 
@@ -311,14 +319,16 @@ lua_State *eng_create_lua_vm(const std::string &luaBaseDir)
     lua_newtable(L);
     lua_newtable(L);
     lua_setfield(L, -2, "loaded");
-    lua_pushstring(L, baseDir.c_str());
+    lua_pushstring(L, projectDir.c_str());
     lua_setfield(L, -2, "basepath");
+    lua_pushstring(L, engineDir.c_str());
+    lua_setfield(L, -2, "enginepath");
     lua_setglobal(L, "package");
 
     eng_behavior_schema_clear();
     eng_prime_behavior_property_globals(L);
-    eng_load_behaviors(L, baseDir + "behaviors/");
-    eng_load_editor_behaviors(L, baseDir + "editor/");
+    eng_load_behaviors(L, projectDir + "behaviors/");
+    eng_load_editor_behaviors(L, engineDir + "editor/");
 
     return L;
 }

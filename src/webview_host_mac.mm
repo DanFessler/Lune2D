@@ -98,7 +98,53 @@ static void webview_install_sdl_cursor_coexistence_swizzle(NSView* sdlContentVie
     });
 }
 
-static WKWebView*        s_webView = nil;
+// Game viewport rect in CSS/points (top-left origin), updated from DOM layout.
+// Used by Lune2DWebView to pass mouse events through to SDL in the viewport area.
+static NSRect s_game_passthrough_rect = NSZeroRect;
+
+@interface Lune2DWebView : WKWebView
+@end
+
+@implementation Lune2DWebView
+// WKWebView overrides `-isFlipped` to YES: local Y matches DOM (top = 0, Y grows down).
+// We must not use bottom-left math here; the previous height−y conversion never matched
+// `getBoundingClientRect`, so hitTest never passed through and SDL saw no mouse events.
+- (BOOL)lune2d_hitInGamePassthrough:(NSPoint)pointInSuperview {
+    if (s_game_passthrough_rect.size.width <= 0 || s_game_passthrough_rect.size.height <= 0)
+        return NO;
+    if (!self.superview)
+        return NO;
+    NSPoint local = [self convertPoint:pointInSuperview fromView:self.superview];
+    if (!NSPointInRect(local, self.bounds))
+        return NO;
+
+    NSRect css = s_game_passthrough_rect;
+    NSRect gameLocal;
+    if ([self isFlipped]) {
+        gameLocal = css;
+    } else {
+        CGFloat H = self.bounds.size.height;
+        gameLocal =
+            NSMakeRect(css.origin.x, H - css.origin.y - css.size.height, css.size.width, css.size.height);
+    }
+    return NSPointInRect(local, gameLocal);
+}
+
+- (NSView*)hitTest:(NSPoint)point {
+    if ([self lune2d_hitInGamePassthrough:point])
+        return nil;
+    return [super hitTest:point];
+}
+
+- (NSView*)hitTest:(NSPoint)point withEvent:(NSEvent*)event {
+    (void)event;
+    if ([self lune2d_hitInGamePassthrough:point])
+        return nil;
+    return [super hitTest:point withEvent:event];
+}
+@end
+
+static Lune2DWebView*    s_webView = nil;
 static NSWindow*         s_nsWindow = nil;
 static WebViewGameRectFn s_rectCb   = nullptr;
 static void*             s_rectUser = nullptr;
@@ -117,6 +163,7 @@ static BOOL webview_overlay_has_keyboard_focus(void) {
 }
 
 static std::string              s_lua_workspace;
+static std::string              s_lua_engine_workspace;
 static void (*s_on_script_reload)(void)                = nullptr;
 static void (*s_on_script_set_paused)(bool paused)     = nullptr;
 static void (*s_on_script_start_sim)(bool capture_editor_scene_snapshot) = nullptr;
@@ -263,6 +310,10 @@ void webview_host_set_lua_workspace(const char* lua_dir_abs_utf8) {
     s_lua_workspace = lua_dir_abs_utf8 ? lua_dir_abs_utf8 : "";
 }
 
+void webview_host_set_lua_engine_workspace(const char* engine_lua_dir_abs_utf8) {
+    s_lua_engine_workspace = engine_lua_dir_abs_utf8 ? engine_lua_dir_abs_utf8 : "";
+}
+
 void webview_host_set_script_controls(void (*on_reload_request)(void),
                                       void (*on_set_paused)(bool paused),
                                       void (*on_start_sim_request)(bool capture_editor_scene_snapshot)) {
@@ -290,7 +341,7 @@ static BOOL script_rel_path_ok(NSString* name) {
     if (parts.count == 1 && isLua)
         return YES;
     if (parts.count == 2 && [parts[1] length] > 0) {
-        if (isLua && ([parts[0] isEqualToString:@"game"] || [parts[0] isEqualToString:@"behaviors"]))
+        if (isLua && ([parts[0] isEqualToString:@"game"] || [parts[0] isEqualToString:@"behaviors"] || [parts[0] isEqualToString:@"editor"]))
             return [parts[1] rangeOfString:@"/"].location == NSNotFound;
         if (isJson && [parts[0] isEqualToString:@"scenes"])
             return [parts[1] rangeOfString:@"/"].location == NSNotFound;
@@ -443,9 +494,14 @@ static void script_bridge_send(NSDictionary* payload) {
                 [files addObject:@{@"path" : rel, @"content" : bText}];
             }
         }
-        NSString*            edDir = [dir stringByAppendingPathComponent:@"editor"];
-        BOOL                 isEdDir = NO;
-        if ([fm fileExistsAtPath:edDir isDirectory:&isEdDir] && isEdDir) {
+        NSString*            edDir = nil;
+        if (!s_lua_engine_workspace.empty()) {
+            NSString* engineRoot = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
+            if (engineRoot.length)
+                edDir = [engineRoot stringByAppendingPathComponent:@"editor"];
+        }
+        BOOL isEdDir = NO;
+        if (edDir && [fm fileExistsAtPath:edDir isDirectory:&isEdDir] && isEdDir) {
             NSArray<NSString*>* enames = [fm contentsOfDirectoryAtPath:edDir error:&err];
             if (!enames) {
                 script_bridge_send(@{
@@ -528,8 +584,17 @@ static void script_bridge_send(NSDictionary* payload) {
             script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua workspace not configured"});
             return;
         }
-        NSString*            dir      = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
-        NSString*            fullPath = [dir stringByAppendingPathComponent:path];
+        NSString* pathStr = path;
+        NSString* rootDir = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
+        if ([pathStr hasPrefix:@"editor/"]) {
+            if (s_lua_engine_workspace.empty()) {
+                script_bridge_send(
+                    @{@"requestId" : rid, @"ok" : @NO, @"error" : @"Engine Lua workspace not configured"});
+                return;
+            }
+            rootDir = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
+        }
+        NSString*            fullPath = [rootDir stringByAppendingPathComponent:path];
         NSString*            parent   = [fullPath stringByDeletingLastPathComponent];
         NSFileManager*       fmW      = [NSFileManager defaultManager];
         NSError*             werr     = nil;
@@ -591,8 +656,9 @@ static void script_bridge_send(NSDictionary* payload) {
     }
 
     if ([op isEqualToString:@"listBehaviors"]) {
-        NSMutableArray* names = [NSMutableArray arrayWithCapacity:g_registered_behaviors.size()];
-        for (const auto& b : g_registered_behaviors)
+        auto sorted = eng_editor_behavior_dropdown_names();
+        NSMutableArray* names = [NSMutableArray arrayWithCapacity:sorted.size()];
+        for (const auto& b : sorted)
             [names addObject:[NSString stringWithUTF8String:b.c_str()]];
         script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"behaviors" : names});
         return;
@@ -809,8 +875,10 @@ static TransNavDelegate* s_nav = nil;
     int x = nx.intValue, y = ny.intValue, w = nw.intValue, h = nh.intValue;
     int uiw = nuiw ? nuiw.intValue : 0;
     int uih = nuih ? nuih.intValue : 0;
-    if (w > 0 && h > 0)
+    if (w > 0 && h > 0) {
+        s_game_passthrough_rect = NSMakeRect(x, y, w, h);
         s_rectCb(x, y, w, h, uiw, uih, s_rectUser);
+    }
 }
 @end
 
@@ -828,7 +896,7 @@ bool webview_host_toggle_visibility() {
         if (s_webview_visible) {
             inject_sdl_ui_basis(s_webView);
         } else {
-            // Key-ups while the hidden overlay held focus never reached SDL; clear stale state.
+            s_game_passthrough_rect = NSZeroRect;
             SDL_ResetKeyboard();
             s_was_overlay_keyboard_focus = false;
         }
@@ -884,8 +952,10 @@ void webview_host_poll_dom_layout(void) {
                 int x = nx.intValue, y = ny.intValue, w = nw.intValue, h = nh.intValue;
                 int uiw = nuiw ? nuiw.intValue : 0;
                 int uih = nuih ? nuih.intValue : 0;
-                if (w > 0 && h > 0)
+                if (w > 0 && h > 0) {
+                    s_game_passthrough_rect = NSMakeRect(x, y, w, h);
                     s_rectCb(x, y, w, h, uiw, uih, s_rectUser);
+                }
             }];
     }
 }
@@ -942,8 +1012,8 @@ bool webview_host_init(SDL_Window* window, const char* web_root_utf8) {
         s_engineScriptBridge = [EngineScriptBridge new];
         [uc addScriptMessageHandler:s_engineScriptBridge name:@"engineScript"];
 
-        WKWebView* wv =
-            [[WKWebView alloc] initWithFrame:contentView.bounds configuration:cfg];
+        Lune2DWebView* wv =
+            [[Lune2DWebView alloc] initWithFrame:contentView.bounds configuration:cfg];
         wv.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 
         // Web Inspector: Safari → Develop → [Mac name] → page (macOS 13.3+).

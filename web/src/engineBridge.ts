@@ -1,12 +1,3 @@
-export type TransformComponent = {
-  type: "Transform";
-  x: number;
-  y: number;
-  angle: number;
-  vx: number;
-  vy: number;
-};
-
 /** Behavior property field metadata (from native schema). */
 export type BehaviorPropertyField = {
   name: string;
@@ -19,9 +10,12 @@ export type BehaviorPropertyField = {
   enumOptions?: string[];
 };
 
-export type ScriptComponent = {
-  type: "Script";
-  behavior: string;
+/** Unified behavior component: covers both native (e.g. Transform) and Lua script behaviors. */
+export type BehaviorComponent = {
+  type: "Behavior";
+  name: string;
+  isNative: boolean;
+  hasEditorPair?: boolean;
   /** Serialized per-instance overrides only (may be empty). */
   properties?: Record<string, unknown>;
   /** Merged values (defaults + overrides) for editor display. */
@@ -29,7 +23,25 @@ export type ScriptComponent = {
   propertySchema?: BehaviorPropertyField[];
 };
 
-export type EngineComponent = TransformComponent | ScriptComponent;
+/** Legacy types kept for backward compat during transition. */
+export type TransformComponent = {
+  type: "Transform";
+  x: number;
+  y: number;
+  angle: number;
+  vx: number;
+  vy: number;
+};
+
+export type ScriptComponent = {
+  type: "Script";
+  behavior: string;
+  properties?: Record<string, unknown>;
+  propertyValues?: Record<string, unknown>;
+  propertySchema?: BehaviorPropertyField[];
+};
+
+export type EngineComponent = BehaviorComponent | TransformComponent | ScriptComponent;
 
 export type EngineEntity = {
   id: string;
@@ -58,13 +70,31 @@ type LegacyFlatEntity = {
   vy: number;
 };
 
-function isTransformComponent(c: EngineComponent): c is TransformComponent {
-  return c.type === "Transform";
+function isTransformBehavior(c: EngineComponent): boolean {
+  if (c.type === "Behavior" && c.name === "Transform") return true;
+  if (c.type === "Transform") return true;
+  return false;
 }
 
-export function getEntityTransform(e: EngineEntity): TransformComponent | null {
-  const t = e.components.find(isTransformComponent);
-  return t ?? null;
+/** Extract transform property values from any component format. */
+export function getEntityTransform(
+  e: EngineEntity,
+): TransformComponent | null {
+  for (const c of e.components) {
+    if (c.type === "Behavior" && c.name === "Transform") {
+      const pv = c.propertyValues ?? {};
+      return {
+        type: "Transform",
+        x: Number(pv.x) || 0,
+        y: Number(pv.y) || 0,
+        angle: Number(pv.angle) || 0,
+        vx: Number(pv.vx) || 0,
+        vy: Number(pv.vy) || 0,
+      };
+    }
+    if (c.type === "Transform") return c;
+  }
+  return null;
 }
 
 function normalizeEntity(row: unknown): EngineEntity | null {

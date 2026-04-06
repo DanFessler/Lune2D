@@ -9,8 +9,8 @@
 #include <string>
 
 #include "editor_bridge.hpp"
-#include "editor_pick.hpp"
 #include "editor_state.hpp"
+#include "engine/lua/lua_editor_input.hpp"
 #include "engine/constants.hpp"
 #include "engine/engine.hpp"
 #include "engine/lua/lua_runtime.hpp"
@@ -72,8 +72,6 @@ static int s_capture_after_frames = -1;
 static const char *s_capture_path = nullptr;
 static bool s_native_game_rect_pct = false;
 
-static uint32_t s_editor_drag_entity = 0;
-static float s_editor_drag_lx = 0.f, s_editor_drag_ly = 0.f;
 
 static bool main_layout_dimensions(int *layout_w, int *layout_h)
 {
@@ -98,60 +96,7 @@ static bool main_window_mouse_to_lu(float window_mx, float window_my, float *lu_
         window_mx, window_my, lu_x, lu_y);
 }
 
-static void main_handle_editor_mouse(const SDL_Event &ev)
-{
-    if (!eng_editor_overlays_enabled())
-    {
-        s_editor_drag_entity = 0;
-        return;
-    }
-
-    switch (ev.type)
-    {
-    case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        if (!ev.button.down || ev.button.button != SDL_BUTTON_LEFT)
-            break;
-        {
-            float lx, ly;
-            if (!main_window_mouse_to_lu(ev.button.x, ev.button.y, &lx, &ly))
-                break;
-            const uint32_t picked = eng_editor_pick_entity_at_lu(g_scene, lx, ly, 18.f);
-            eng_editor_set_selected_entity(picked);
-            webview_host_notify_selected_entity(picked);
-            s_editor_drag_entity = picked;
-            s_editor_drag_lx = lx;
-            s_editor_drag_ly = ly;
-        }
-        break;
-    case SDL_EVENT_MOUSE_BUTTON_UP:
-        if (ev.button.button == SDL_BUTTON_LEFT)
-            s_editor_drag_entity = 0;
-        break;
-    case SDL_EVENT_MOUSE_MOTION:
-        if (s_editor_drag_entity == 0 || (ev.motion.state & SDL_BUTTON_LMASK) == 0)
-            break;
-        {
-            float lx, ly;
-            if (!main_window_mouse_to_lu(ev.motion.x, ev.motion.y, &lx, &ly))
-                break;
-            Entity *e = g_scene.entity(s_editor_drag_entity);
-            if (!e)
-            {
-                s_editor_drag_entity = 0;
-                break;
-            }
-            const float dx = lx - s_editor_drag_lx;
-            const float dy = ly - s_editor_drag_ly;
-            g_scene.setTransformField(s_editor_drag_entity, "x", e->transform.x + dx);
-            g_scene.setTransformField(s_editor_drag_entity, "y", e->transform.y + dy);
-            s_editor_drag_lx = lx;
-            s_editor_drag_ly = ly;
-        }
-        break;
-    default:
-        break;
-    }
-}
+// Native pick/drag removed — handled by engine Luau `lua/editor/Transform.lua` via editorInput APIs.
 
 static void parse_cli(int argc, char **argv)
 {
@@ -174,18 +119,19 @@ static void parse_cli(int argc, char **argv)
         s_capture_after_frames = 180;
 }
 
-static std::string s_lua_base_dir;
+static std::string s_engine_lua_dir;
+static std::string s_project_lua_dir;
 static std::string s_default_scene_path;
 
 static void reload_behaviors_from_web_ui()
 {
     if (s_lua_for_behaviors_reload)
-        eng_reload_behaviors(s_lua_for_behaviors_reload, s_lua_base_dir);
+        eng_reload_behaviors(s_lua_for_behaviors_reload, s_engine_lua_dir, s_project_lua_dir);
 }
 
 static lua_State *create_lua_vm_only()
 {
-    return eng_create_lua_vm(s_lua_base_dir);
+    return eng_create_lua_vm(s_engine_lua_dir, s_project_lua_dir);
 }
 
 static void load_default_scene_file_into_g_scene()
@@ -243,9 +189,12 @@ int main(int argc, char *argv[])
     g_eng.audio.init();
 
     webview_host_set_game_rect_callback(on_web_game_rect, nullptr);
-    s_lua_base_dir = std::string(SDL_GetBasePath()) + "../lua";
-    webview_host_set_lua_workspace(s_lua_base_dir.c_str());
-    s_default_scene_path = s_lua_base_dir + "/scenes/default.json";
+    std::string repoLua = std::string(SDL_GetBasePath()) + "../lua";
+    s_engine_lua_dir = repoLua;
+    s_project_lua_dir = std::string(SDL_GetBasePath()) + "../default-project";
+    webview_host_set_lua_workspace(s_project_lua_dir.c_str());
+    webview_host_set_lua_engine_workspace(s_engine_lua_dir.c_str());
+    s_default_scene_path = s_project_lua_dir + "/scenes/default.json";
 
     webview_host_set_script_controls(on_script_reload_request, on_script_set_paused,
                                      on_script_start_sim_request);
@@ -255,7 +204,7 @@ int main(int argc, char *argv[])
             SDL_Log("Web overlay init failed (tried %s)", webRoot.c_str());
     }
 
-    webview_host_set_macos_scenes_directory_for_save_panel((s_lua_base_dir + "/scenes").c_str());
+    webview_host_set_macos_scenes_directory_for_save_panel((s_project_lua_dir + "/scenes").c_str());
     webview_host_install_macos_app_menu(native_request_quit, native_save_scene_default,
                                         native_save_scene_as);
 
@@ -307,7 +256,23 @@ int main(int argc, char *argv[])
             else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN || ev.type == SDL_EVENT_MOUSE_BUTTON_UP ||
                      ev.type == SDL_EVENT_MOUSE_MOTION)
             {
-                main_handle_editor_mouse(ev);
+                if (eng_editor_overlays_enabled())
+                {
+                    float lx, ly;
+                    float mx = (ev.type == SDL_EVENT_MOUSE_MOTION) ? ev.motion.x : ev.button.x;
+                    float my = (ev.type == SDL_EVENT_MOUSE_MOTION) ? ev.motion.y : ev.button.y;
+                    if (main_window_mouse_to_lu(mx, my, &lx, &ly))
+                        eng_editor_input_set_mouse(lx, ly);
+
+                    if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT)
+                        eng_editor_input_button_event(0, true);
+                    else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_RIGHT)
+                        eng_editor_input_button_event(1, true);
+                    else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT)
+                        eng_editor_input_button_event(0, false);
+                    else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_RIGHT)
+                        eng_editor_input_button_event(1, false);
+                }
             }
             else if (ev.type == SDL_EVENT_KEY_DOWN)
             {
@@ -440,6 +405,8 @@ int main(int argc, char *argv[])
         {
             eng_scene_update_lua_scripts(L, g_scene, dt);
         }
+        eng_editor_input_end_frame();
+        eng_scene_update_editor_behaviors(L, g_scene, dt);
         editor_bridge_publish_scene_snapshot(g_scene);
 
         SDL_SetRenderDrawColor(g_eng.renderer, 0, 0, 0, 255);

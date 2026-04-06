@@ -310,3 +310,28 @@
   background: rgba(255, 80, 80, 0.25);
   color: #ff6666;
 }
+
+.engineBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(100, 160, 255, 0.2);
+  color: rgba(130, 180, 255, 0.9);
+  flex-shrink: 0;
+}
+
+.editorPairBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 2px;
+  color: rgba(180, 180, 180, 0.6);
+  flex-shrink: 0;
+}

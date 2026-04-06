@@ -4,6 +4,8 @@ import { reloadBehaviors, writeLuaFile } from "../luaEditorBridge";
 import {
   behaviorLifecycleTemplate,
   behaviorRelativePath,
+  editorBehaviorLifecycleTemplate,
+  editorBehaviorRelativePath,
   sanitizeBehaviorBaseName,
 } from "./behaviorScriptTemplate";
 import styles from "./NewScriptDialog.module.css";
@@ -23,12 +25,14 @@ export function NewScriptDialog({
 }) {
   const [draftName, setDraftName] = useState("NewBehavior");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [createEditorPair, setCreateEditorPair] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setDraftName("NewBehavior");
     setNameError(null);
+    setCreateEditorPair(false);
     queueMicrotask(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
@@ -48,6 +52,11 @@ export function NewScriptDialog({
     const template = behaviorLifecycleTemplate(base);
     try {
       await writeLuaFile(relPath, template);
+      if (createEditorPair) {
+        const edPath = editorBehaviorRelativePath(base);
+        const edTemplate = editorBehaviorLifecycleTemplate(base);
+        await writeLuaFile(edPath, edTemplate);
+      }
       await reloadBehaviors();
       await engine.runtime.addScript(entityId, base);
       onOpenLuaFile(relPath, template);
@@ -103,6 +112,16 @@ export function NewScriptDialog({
               {nameError}
             </p>
           ) : null}
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={createEditorPair}
+              onChange={(e) => setCreateEditorPair(e.target.checked)}
+            />
+            Also create editor behavior
+          </label>
         </div>
         <div className={styles.actions}>
           <button type="button" className={styles.btn} onClick={onClose}>
