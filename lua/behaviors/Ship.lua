@@ -23,8 +23,8 @@ local function spawnBulletFromShip(self: any, sx: number, sy: number, sang: numb
 	audio.play("shoot")
 end
 
-	return {
-	properties = defineProperties {
+return {
+	properties = defineProperties({
 		rotateSpeed = prop.number(C.SHIP_ROT_SPD, { min = 60, max = 400, slider = true }),
 		thrust = prop.number(C.SHIP_THRUST, { min = 80, max = 600, slider = true }),
 		maxSpeed = prop.number(C.SHIP_MAX_SPD, { min = 150, max = 800, slider = true }),
@@ -34,7 +34,7 @@ end
 		bulletLife = prop.number(C.BULLET_LIFE, { min = 0.25, max = 2.5 }),
 		hullColor = prop.color(255, 255, 255, 255),
 		flameColor = prop.color(255, 160, 0, 255),
-	},
+	}),
 
 	start = function(self)
 		local id = self.entityId
