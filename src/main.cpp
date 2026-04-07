@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
     s_project_lua_dir = std::string(SDL_GetBasePath()) + "../default-project";
     webview_host_set_lua_workspace(s_project_lua_dir.c_str());
     webview_host_set_lua_engine_workspace(s_engine_lua_dir.c_str());
-    s_default_scene_path = s_project_lua_dir + "/scenes/default.json";
+    s_default_scene_path = s_project_lua_dir + "/scenes/default.scene.json";
 
     webview_host_set_script_controls(on_script_reload_request, on_script_set_paused,
                                      on_script_start_sim_request);

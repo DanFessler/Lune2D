@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { engine } from "../engineProxy";
-import { reloadBehaviors, writeLuaFile } from "../luaEditorBridge";
+import { reloadBehaviors } from "../luaEditorBridge";
+import { writeProjectFile } from "../projectFileBridge";
 import {
   behaviorLifecycleTemplate,
   behaviorRelativePath,
@@ -51,11 +52,11 @@ export function NewScriptDialog({
     const relPath = behaviorRelativePath(base);
     const template = behaviorLifecycleTemplate(base);
     try {
-      await writeLuaFile(relPath, template);
+      await writeProjectFile(relPath, template);
       if (createEditorPair) {
         const edPath = editorBehaviorRelativePath(base);
         const edTemplate = editorBehaviorLifecycleTemplate(base);
-        await writeLuaFile(edPath, edTemplate);
+        await writeProjectFile(edPath, edTemplate);
       }
       await reloadBehaviors();
       await engine.runtime.addScript(entityId, base);

@@ -1,4 +1,5 @@
 [
+  { "op": "runtime.loadScene",      "args": [{ "name": "relativePath", "type": "string" }] },
   { "op": "runtime.spawn",          "args": [{ "name": "name", "type": "string" }], "returns": "number" },
   { "op": "runtime.destroy",        "args": [{ "name": "id", "type": "number" }] },
   { "op": "runtime.setName",        "args": [{ "name": "id", "type": "number" }, { "name": "name", "type": "string" }] },

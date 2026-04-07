@@ -1,6 +1,7 @@
 import { Dockable } from "@danfessler/react-dockable";
 import "@danfessler/react-dockable/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AssetBrowser from "./editor/views/AssetBrowser";
 import { NewScriptDialog } from "./editor/NewScriptDialog";
 import SceneHierarchy from "./editor/views/SceneHierarchy";
 import EngineInspector from "./editor/views/EngineInspector";
@@ -28,6 +29,7 @@ export default function App() {
   const [luaOpenFileRequest, setLuaOpenFileRequest] =
     useState<LuaEditorOpenRequest | null>(null);
   const luaOpenSeq = useRef(0);
+  const [assetBrowserRefreshKey, setAssetBrowserRefreshKey] = useState(0);
 
   const focusLuaFile = useCallback((path: string, content?: string) => {
     luaOpenSeq.current += 1;
@@ -40,6 +42,18 @@ export default function App() {
 
   const clearLuaOpenFileRequest = useCallback(() => {
     setLuaOpenFileRequest(null);
+  }, []);
+
+  const bumpAssetBrowserRefresh = useCallback(() => {
+    setAssetBrowserRefreshKey((k) => k + 1);
+  }, []);
+
+  const loadSceneFromAssets = useCallback(async (relativePath: string) => {
+    try {
+      await engine.runtime.loadScene(relativePath);
+    } catch (e) {
+      console.error(e);
+    }
   }, []);
 
   useGameRectBridge(gameSurface);
@@ -172,7 +186,7 @@ export default function App() {
             </Dockable.Tab>
           </Dockable.Panel>
 
-          <Dockable.Panel size={5} orientation="column">
+          <Dockable.Panel size={6} orientation="column">
             <Dockable.Window size={3}>
               <Dockable.Tab id="center-game" name="Game">
                 <div className="game-dock-body">
@@ -189,6 +203,16 @@ export default function App() {
                 <LuaEditorPanel
                   openFileRequest={luaOpenFileRequest}
                   onConsumedOpenFileRequest={clearLuaOpenFileRequest}
+                  onFilesMutated={bumpAssetBrowserRefresh}
+                />
+              </Dockable.Tab>
+            </Dockable.Window>
+            <Dockable.Window size={2}>
+              <Dockable.Tab id="assets-browser" name="Assets">
+                <AssetBrowser
+                  refreshKey={assetBrowserRefreshKey}
+                  onOpenEntry={(path) => focusLuaFile(path)}
+                  onLoadScene={(path) => void loadSceneFromAssets(path)}
                 />
               </Dockable.Tab>
             </Dockable.Window>

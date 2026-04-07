@@ -8,7 +8,7 @@ local fpsAccum: number = 0
 
 local function startGame()
 	if session.state == "gameover" then
-		runtime.loadScene("scenes/default.json")
+		runtime.loadScene("scenes/default.scene.json")
 		return
 	end
 	if session.state == "title" then
@@ -107,7 +107,7 @@ end
 		if key == "space" and session.state == "title" then
 			startGame()
 		elseif key == "r" and session.state == "gameover" then
-			runtime.loadScene("scenes/default.json")
+			runtime.loadScene("scenes/default.scene.json")
 		end
 	end,
 	onHudPlay = function(_self)

@@ -13,6 +13,7 @@
 #include "editor_state.hpp"
 #include "engine/engine.hpp"
 #include "engine/lua/lua_runtime.hpp"
+#include "engine/scene_loader.hpp"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <cmath>
@@ -332,27 +333,85 @@ void webview_host_set_behaviors_reload_fn(void (*reload_fn)(void)) {
     s_behaviors_reload_fn = reload_fn;
 }
 
-static BOOL script_rel_path_ok(NSString* name) {
-    if (![name isKindOfClass:[NSString class]] || !name.length)
+static BOOL project_list_dir_arg_ok(NSString* dir) {
+    if (![dir isKindOfClass:[NSString class]])
         return NO;
-    if ([name containsString:@".."])
+    if ([dir containsString:@".."])
         return NO;
-    if ([name rangeOfString:@"\\"].location != NSNotFound)
+    if ([dir rangeOfString:@"\\"].location != NSNotFound)
         return NO;
-    BOOL isLua  = [name hasSuffix:@".lua"];
-    BOOL isJson = [name hasSuffix:@".json"];
-    if (!isLua && !isJson)
+    if ([dir hasPrefix:@"/"])
         return NO;
-    NSArray<NSString*>* parts = [name componentsSeparatedByString:@"/"];
-    if (parts.count == 1 && isLua)
-        return YES;
-    if (parts.count == 2 && [parts[1] length] > 0) {
-        if (isLua && ([parts[0] isEqualToString:@"game"] || [parts[0] isEqualToString:@"behaviors"] || [parts[0] isEqualToString:@"editor"]))
-            return [parts[1] rangeOfString:@"/"].location == NSNotFound;
-        if (isJson && [parts[0] isEqualToString:@"scenes"])
-            return [parts[1] rangeOfString:@"/"].location == NSNotFound;
+    return YES;
+}
+
+static NSString* string_join_path_components(NSString* root, NSString* rel) {
+    if (!rel.length)
+        return root;
+    NSString* result = root;
+    for (NSString* comp in [rel pathComponents]) {
+        if ([comp isEqualToString:@"/"] || comp.length == 0)
+            continue;
+        result = [result stringByAppendingPathComponent:comp];
     }
-    return NO;
+    return result;
+}
+
+static BOOL path_is_under_root(NSString* fullPath, NSString* root) {
+    NSString* canonR = [[root stringByResolvingSymlinksInPath] stringByStandardizingPath];
+    NSString* canonF = [[fullPath stringByResolvingSymlinksInPath] stringByStandardizingPath];
+    if (!canonR.length || !canonF.length)
+        return NO;
+    if (![canonF hasPrefix:canonR])
+        return NO;
+    if (canonF.length > canonR.length) {
+        unichar c = [canonF characterAtIndex:canonR.length];
+        return c == '/';
+    }
+    return YES;
+}
+
+/// Project-relative file path for read/write (non-empty). `editor/…` resolves under engine workspace.
+static NSString* resolve_project_or_engine_file_path(NSString* rel, NSError** outErr) {
+    if (![rel isKindOfClass:[NSString class]] || !rel.length) {
+        if (outErr)
+            *outErr = [NSError errorWithDomain:@"bridge" code:10
+                                      userInfo:@{NSLocalizedDescriptionKey : @"Invalid path"}];
+        return nil;
+    }
+    if ([rel containsString:@".."] || [rel rangeOfString:@"\\"].location != NSNotFound ||
+        [rel hasPrefix:@"/"]) {
+        if (outErr)
+            *outErr = [NSError errorWithDomain:@"bridge" code:11
+                                      userInfo:@{NSLocalizedDescriptionKey : @"Invalid path"}];
+        return nil;
+    }
+    if (s_lua_workspace.empty()) {
+        if (outErr)
+            *outErr = [NSError errorWithDomain:@"bridge" code:12
+                                      userInfo:@{NSLocalizedDescriptionKey : @"Project workspace not configured"}];
+        return nil;
+    }
+    NSString* projRoot = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
+    NSString* root     = projRoot;
+    if ([rel hasPrefix:@"editor/"] || [rel isEqualToString:@"editor"]) {
+        if (s_lua_engine_workspace.empty()) {
+            if (outErr)
+                *outErr = [NSError errorWithDomain:@"bridge" code:13 userInfo:@{
+                    NSLocalizedDescriptionKey : @"Engine Lua workspace not configured"
+                }];
+            return nil;
+        }
+        root = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
+    }
+    NSString* full = string_join_path_components(root, rel);
+    if (!path_is_under_root(full, root)) {
+        if (outErr)
+            *outErr = [NSError errorWithDomain:@"bridge" code:14
+                                      userInfo:@{NSLocalizedDescriptionKey : @"Path outside workspace"}];
+        return nil;
+    }
+    return full;
 }
 
 static void script_bridge_send(NSDictionary* payload) {
@@ -390,19 +449,57 @@ static void script_bridge_send(NSDictionary* payload) {
     if (![rid isKindOfClass:[NSString class]] || !rid.length || ![op isKindOfClass:[NSString class]])
         return;
 
-    if ([op isEqualToString:@"listLua"]) {
+    if ([op isEqualToString:@"listProjectDir"]) {
         if (s_lua_workspace.empty()) {
             script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua workspace not configured"});
             return;
         }
-        NSString* dir = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
-        if (!dir.length) {
+        NSString* dirArg = @"";
+        if ([d[@"dir"] isKindOfClass:[NSString class]])
+            dirArg = d[@"dir"];
+        if (!project_list_dir_arg_ok(dirArg)) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Invalid dir"});
+            return;
+        }
+        NSString* projRoot = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
+        if (!projRoot.length) {
             script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua workspace path invalid"});
             return;
         }
-        NSError*             err  = nil;
-        NSFileManager*       fm   = [NSFileManager defaultManager];
-        NSArray<NSString*>*  names = [fm contentsOfDirectoryAtPath:dir error:&err];
+        NSFileManager* fm     = [NSFileManager defaultManager];
+        NSError*       err    = nil;
+        NSString*      listDisk;
+        if (dirArg.length == 0) {
+            listDisk = projRoot;
+        } else if ([dirArg isEqualToString:@"editor"] || [dirArg hasPrefix:@"editor/"]) {
+            if (s_lua_engine_workspace.empty()) {
+                script_bridge_send(@{
+                    @"requestId" : rid,
+                    @"ok" : @NO,
+                    @"error" : @"Engine Lua workspace not configured"
+                });
+                return;
+            }
+            NSString* eng = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
+            listDisk      = string_join_path_components(eng, dirArg);
+        } else {
+            listDisk = string_join_path_components(projRoot, dirArg);
+        }
+        NSString* anchorRoot = projRoot;
+        if ([dirArg isEqualToString:@"editor"] || [dirArg hasPrefix:@"editor/"])
+            anchorRoot = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
+        if (!path_is_under_root(listDisk, anchorRoot) && ![listDisk isEqualToString:anchorRoot]) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Path outside workspace"});
+            return;
+        }
+        BOOL listIsDir = NO;
+        if (![fm fileExistsAtPath:listDisk isDirectory:&listIsDir] || !listIsDir) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Not a directory"});
+            return;
+        }
+        NSArray<NSString*>* names =
+            [[fm contentsOfDirectoryAtPath:listDisk error:&err]
+                sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)];
         if (!names) {
             script_bridge_send(@{
                 @"requestId" : rid,
@@ -411,199 +508,136 @@ static void script_bridge_send(NSDictionary* payload) {
             });
             return;
         }
-        NSMutableArray* files = [NSMutableArray array];
+        NSMutableArray* entries = [NSMutableArray array];
+        NSISO8601DateFormatter* isoFmt = [[NSISO8601DateFormatter alloc] init];
+        isoFmt.formatOptions = NSISO8601DateFormatWithInternetDateTime;
         for (NSString* name in names) {
-            if (![name hasSuffix:@".lua"])
+            if ([name hasPrefix:@"."])
                 continue;
-            if (!script_rel_path_ok(name))
+            NSString* childFull = [listDisk stringByAppendingPathComponent:name];
+            BOOL      isDir     = NO;
+            if (![fm fileExistsAtPath:childFull isDirectory:&isDir])
                 continue;
-            NSString* fullPath = [dir stringByAppendingPathComponent:name];
-            NSString* text =
-                [NSString stringWithContentsOfFile:fullPath
-                                            encoding:NSUTF8StringEncoding
-                                               error:&err];
-            if (!text) {
-                script_bridge_send(@{
-                    @"requestId" : rid,
-                    @"ok" : @NO,
-                    @"error" : err.localizedDescription ?: @"read failed"
-                });
-                return;
+            NSString* attrsPath  = childFull;
+            NSError*  attrErr    = nil;
+            NSDictionary* attrs  = [fm attributesOfItemAtPath:attrsPath error:&attrErr];
+            int64_t     fileSize = attrs ? [attrs fileSize] : 0;
+            NSString* relPath =
+                dirArg.length ? [NSString stringWithFormat:@"%@/%@", dirArg, name] : name;
+            NSMutableDictionary* row = [@{
+                @"name" : name,
+                @"path" : relPath,
+                @"isDirectory" : @(isDir),
+                @"size" : @(fileSize),
+            } mutableCopy];
+            NSDate* mdate = [attrs fileModificationDate];
+            if (mdate) {
+                NSString* iso = [isoFmt stringFromDate:mdate];
+                if (iso.length)
+                    row[@"mtime"] = iso;
             }
-            [files addObject:@{@"path" : name, @"content" : text}];
+            if (!isDir && [name.lowercaseString hasSuffix:@".png"]) {
+                NSData* pngData = [NSData dataWithContentsOfFile:childFull options:0 error:&attrErr];
+                if (pngData && pngData.length)
+                    row[@"thumbnail"] = [pngData base64EncodedStringWithOptions:0];
+            }
+            [entries addObject:row];
         }
-        NSString*            gameDir = [dir stringByAppendingPathComponent:@"game"];
-        BOOL                 isSubdir = NO;
-        if ([fm fileExistsAtPath:gameDir isDirectory:&isSubdir] && isSubdir) {
-            NSArray<NSString*>* gnames = [fm contentsOfDirectoryAtPath:gameDir error:&err];
-            if (!gnames) {
-                script_bridge_send(@{
-                    @"requestId" : rid,
-                    @"ok" : @NO,
-                    @"error" : err.localizedDescription ?: @"list game/ failed"
-                });
-                return;
-            }
-            for (NSString* gname in gnames) {
-                if (![gname hasSuffix:@".lua"])
-                    continue;
-                NSString* rel = [NSString stringWithFormat:@"game/%@", gname];
-                if (!script_rel_path_ok(rel))
-                    continue;
-                NSString* gFull = [gameDir stringByAppendingPathComponent:gname];
-                NSString* gText =
-                    [NSString stringWithContentsOfFile:gFull
-                                              encoding:NSUTF8StringEncoding
-                                                 error:&err];
-                if (!gText) {
-                    script_bridge_send(@{
-                        @"requestId" : rid,
-                        @"ok" : @NO,
-                        @"error" : err.localizedDescription ?: @"read failed"
-                    });
-                    return;
+        if (dirArg.length == 0 && !s_lua_engine_workspace.empty()) {
+            NSString* eng      = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
+            NSString* edOnDisk = [eng stringByAppendingPathComponent:@"editor"];
+            BOOL      edDirOk  = NO;
+            if ([fm fileExistsAtPath:edOnDisk isDirectory:&edDirOk] && edDirOk) {
+                BOOL hasEditor = NO;
+                for (NSDictionary* e in entries) {
+                    if ([[e[@"name"] lowercaseString] isEqualToString:@"editor"]) {
+                        hasEditor = YES;
+                        break;
+                    }
                 }
-                [files addObject:@{@"path" : rel, @"content" : gText}];
-            }
-        }
-        NSString*            behDir = [dir stringByAppendingPathComponent:@"behaviors"];
-        BOOL                 isBehDir = NO;
-        if ([fm fileExistsAtPath:behDir isDirectory:&isBehDir] && isBehDir) {
-            NSArray<NSString*>* bnames = [fm contentsOfDirectoryAtPath:behDir error:&err];
-            if (!bnames) {
-                script_bridge_send(@{
-                    @"requestId" : rid,
-                    @"ok" : @NO,
-                    @"error" : err.localizedDescription ?: @"list behaviors/ failed"
-                });
-                return;
-            }
-            for (NSString* bname in bnames) {
-                if (![bname hasSuffix:@".lua"])
-                    continue;
-                NSString* rel = [NSString stringWithFormat:@"behaviors/%@", bname];
-                if (!script_rel_path_ok(rel))
-                    continue;
-                NSString* bFull = [behDir stringByAppendingPathComponent:bname];
-                NSString* bText =
-                    [NSString stringWithContentsOfFile:bFull
-                                              encoding:NSUTF8StringEncoding
-                                                 error:&err];
-                if (!bText) {
-                    script_bridge_send(@{
-                        @"requestId" : rid,
-                        @"ok" : @NO,
-                        @"error" : err.localizedDescription ?: @"read failed"
-                    });
-                    return;
+                if (!hasEditor) {
+                    [entries addObject:@{
+                        @"name" : @"editor",
+                        @"path" : @"editor",
+                        @"isDirectory" : @YES,
+                        @"size" : @0,
+                    }];
                 }
-                [files addObject:@{@"path" : rel, @"content" : bText}];
             }
         }
-        NSString*            edDir = nil;
-        if (!s_lua_engine_workspace.empty()) {
-            NSString* engineRoot = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
-            if (engineRoot.length)
-                edDir = [engineRoot stringByAppendingPathComponent:@"editor"];
-        }
-        BOOL isEdDir = NO;
-        if (edDir && [fm fileExistsAtPath:edDir isDirectory:&isEdDir] && isEdDir) {
-            NSArray<NSString*>* enames = [fm contentsOfDirectoryAtPath:edDir error:&err];
-            if (!enames) {
-                script_bridge_send(@{
-                    @"requestId" : rid,
-                    @"ok" : @NO,
-                    @"error" : err.localizedDescription ?: @"list editor/ failed"
-                });
-                return;
-            }
-            for (NSString* ename in enames) {
-                if (![ename hasSuffix:@".lua"])
-                    continue;
-                NSString* rel = [NSString stringWithFormat:@"editor/%@", ename];
-                if (!script_rel_path_ok(rel))
-                    continue;
-                NSString* eFull = [edDir stringByAppendingPathComponent:ename];
-                NSString* eText =
-                    [NSString stringWithContentsOfFile:eFull
-                                              encoding:NSUTF8StringEncoding
-                                                 error:&err];
-                if (!eText) {
-                    script_bridge_send(@{
-                        @"requestId" : rid,
-                        @"ok" : @NO,
-                        @"error" : err.localizedDescription ?: @"read failed"
-                    });
-                    return;
-                }
-                [files addObject:@{@"path" : rel, @"content" : eText}];
-            }
-        }
-        NSString*            scnDir = [dir stringByAppendingPathComponent:@"scenes"];
-        BOOL                 isScnDir = NO;
-        if ([fm fileExistsAtPath:scnDir isDirectory:&isScnDir] && isScnDir) {
-            NSArray<NSString*>* snames = [fm contentsOfDirectoryAtPath:scnDir error:&err];
-            if (!snames) {
-                script_bridge_send(@{
-                    @"requestId" : rid,
-                    @"ok" : @NO,
-                    @"error" : err.localizedDescription ?: @"list scenes/ failed"
-                });
-                return;
-            }
-            for (NSString* sname in snames) {
-                if (![sname hasSuffix:@".json"])
-                    continue;
-                NSString* rel = [NSString stringWithFormat:@"scenes/%@", sname];
-                if (!script_rel_path_ok(rel))
-                    continue;
-                NSString* sFull = [scnDir stringByAppendingPathComponent:sname];
-                NSString* sText =
-                    [NSString stringWithContentsOfFile:sFull
-                                              encoding:NSUTF8StringEncoding
-                                                 error:&err];
-                if (!sText) {
-                    script_bridge_send(@{
-                        @"requestId" : rid,
-                        @"ok" : @NO,
-                        @"error" : err.localizedDescription ?: @"read failed"
-                    });
-                    return;
-                }
-                [files addObject:@{@"path" : rel, @"content" : sText}];
-            }
-        }
-        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"files" : files});
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"entries" : entries});
         return;
     }
 
-    if ([op isEqualToString:@"writeLua"]) {
-        NSString* path    = d[@"path"];
-        NSString* content = d[@"content"];
-        if (![content isKindOfClass:[NSString class]])
-            content = @"";
-        if (!script_rel_path_ok(path)) {
-            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Invalid path"});
+    if ([op isEqualToString:@"readProjectFile"]) {
+        NSString* relPath = d[@"path"];
+        if (![relPath isKindOfClass:[NSString class]]) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Missing path"});
             return;
         }
-        if (s_lua_workspace.empty()) {
-            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua workspace not configured"});
+        NSError*  resErr = nil;
+        NSString* full   = resolve_project_or_engine_file_path(relPath, &resErr);
+        if (!full) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : resErr.localizedDescription ?: @"Invalid path"
+            });
             return;
         }
-        NSString* pathStr = path;
-        NSString* rootDir = [NSString stringWithUTF8String:s_lua_workspace.c_str()];
-        if ([pathStr hasPrefix:@"editor/"]) {
-            if (s_lua_engine_workspace.empty()) {
-                script_bridge_send(
-                    @{@"requestId" : rid, @"ok" : @NO, @"error" : @"Engine Lua workspace not configured"});
+        NSString* enc = d[@"encoding"];
+        if ([enc isKindOfClass:[NSString class]] && [enc isEqualToString:@"base64"]) {
+            NSData* data = [NSData dataWithContentsOfFile:full options:0 error:&resErr];
+            if (!data) {
+                script_bridge_send(@{
+                    @"requestId" : rid,
+                    @"ok" : @NO,
+                    @"error" : resErr.localizedDescription ?: @"read failed"
+                });
                 return;
             }
-            rootDir = [NSString stringWithUTF8String:s_lua_engine_workspace.c_str()];
+            NSString* b64 = [data base64EncodedStringWithOptions:0];
+            script_bridge_send(
+                @{@"requestId" : rid, @"ok" : @YES, @"content" : b64 ? b64 : @""});
+            return;
         }
-        NSString*            fullPath = [rootDir stringByAppendingPathComponent:path];
-        NSString*            parent   = [fullPath stringByDeletingLastPathComponent];
-        NSFileManager*       fmW      = [NSFileManager defaultManager];
-        NSError*             werr     = nil;
+        NSError* err = nil;
+        NSString* text =
+            [NSString stringWithContentsOfFile:full encoding:NSUTF8StringEncoding error:&err];
+        if (!text) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : err.localizedDescription ?: @"read failed"
+            });
+            return;
+        }
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"content" : text});
+        return;
+    }
+
+    if ([op isEqualToString:@"writeProjectFile"]) {
+        NSString* path    = d[@"path"];
+        NSString* content = d[@"content"];
+        if (![path isKindOfClass:[NSString class]] || !path.length) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"Missing path"});
+            return;
+        }
+        if (![content isKindOfClass:[NSString class]])
+            content = @"";
+        NSError*  resErr = nil;
+        NSString* fullPath = resolve_project_or_engine_file_path(path, &resErr);
+        if (!fullPath) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : resErr.localizedDescription ?: @"Invalid path"
+            });
+            return;
+        }
+        NSString*            parent = [fullPath stringByDeletingLastPathComponent];
+        NSFileManager*       fmW    = [NSFileManager defaultManager];
+        NSError*             werr   = nil;
         if (![fmW fileExistsAtPath:parent]) {
             if (![fmW createDirectoryAtPath:parent
                  withIntermediateDirectories:YES
@@ -691,6 +725,38 @@ static void script_bridge_send(NSDictionary* payload) {
 
     // ── Scene mutation ops (two-way bridge) ──────────────────────────────
     NSArray* args = d[@"args"];
+
+    if ([op isEqualToString:@"runtime.loadScene"]) {
+        if (![args isKindOfClass:[NSArray class]] || [args count] < 1) {
+            script_bridge_send(
+                @{@"requestId" : rid, @"ok" : @NO, @"error" : @"runtime.loadScene: missing path"});
+            return;
+        }
+        id p0 = args[0];
+        if (![p0 isKindOfClass:[NSString class]] || ![p0 length]) {
+            script_bridge_send(
+                @{@"requestId" : rid, @"ok" : @NO, @"error" : @"runtime.loadScene: invalid path"});
+            return;
+        }
+        NSError*  resErr = nil;
+        NSString* full   = resolve_project_or_engine_file_path((NSString*)p0, &resErr);
+        if (!full) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : resErr.localizedDescription ?: @"resolve path failed"
+            });
+            return;
+        }
+        std::string utf8 = std::string([full UTF8String]);
+        g_scene.clear();
+        if (!eng_load_scene(g_scene, utf8)) {
+            script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"loadScene failed"});
+            return;
+        }
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
+        return;
+    }
 
     if ([op isEqualToString:@"runtime.spawn"]) {
         NSString* name = ([args count] > 0 && [args[0] isKindOfClass:[NSString class]])

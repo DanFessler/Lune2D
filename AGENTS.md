@@ -11,7 +11,7 @@ A **general-purpose, small game engine and editor harness**, not “an Asteroids
 
 The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native ↔ web IPC carries script/workspace ops, scene edits, and entity snapshots.
 
-**Asteroids** is the **default example project** under `default-project/` (`game/`, `behaviors/`, `scenes/default.json`, …). **`lua/`** holds **engine-bundled** Luau only (`editor/`, e.g. Transform gizmo)—the layout habit for a future world where the game lives outside the engine tree.
+**Asteroids** is the **default example project** under `default-project/` (`game/`, `behaviors/`, `scenes/default.scene.json`, …). **`lua/`** holds **engine-bundled** Luau only (`editor/`, e.g. Transform gizmo)—the layout habit for a future world where the game lives outside the engine tree.
 
 ## Goals
 
@@ -64,7 +64,7 @@ Workflow for agents: `.cursor/skills/incident-report/SKILL.md`.
 
 ## Further pointers
 
-- Default sample scene: `default-project/scenes/default.json` (legacy rows may omit `id`; saves emit `id` for round-trip).
+- Default sample scene: `default-project/scenes/default.scene.json` (legacy rows may omit `id`; saves emit `id` for round-trip).
 - Bridge: `src/webview_host_mac.mm` (macOS), stub elsewhere.
 - Behaviors: `src/engine/lua/script_host.`\*, web `reloadBehaviors` / `restartGame`.
 

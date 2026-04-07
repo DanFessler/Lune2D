@@ -1,17 +1,15 @@
 import Editor from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import { useCallback, useEffect, useState } from "react";
-import {
-  listLuaFiles,
-  writeLuaFile,
-  type LuaWorkspaceFile,
-} from "./luaEditorBridge";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useShallow } from "zustand/shallow";
 import { registerLuauEditorFeatures } from "./monacoLuau";
+import { readProjectFile, writeProjectFile } from "./projectFileBridge";
+import { useLuaEditorStore } from "./luaEditorStore";
 import "./LuaEditorPanel.css";
 
 export type LuaEditorOpenRequest = {
   path: string;
-  /** Optional buffer to show before listLua returns (e.g. just-written file). */
+  /** Optional buffer before `readProjectFile` (e.g. just-written file). */
   content?: string;
   /** Bump on each open so the same path can be opened again. */
   id: number;
@@ -20,130 +18,199 @@ export type LuaEditorOpenRequest = {
 type LuaEditorPanelProps = {
   openFileRequest?: LuaEditorOpenRequest | null;
   onConsumedOpenFileRequest?: () => void;
+  /** Called after save or programmatic open so sibling views (e.g. Asset browser) can re-list. */
+  onFilesMutated?: () => void;
 };
+
+function monacoLanguageForPath(path: string | null): string {
+  if (!path) return "plaintext";
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".lua") || path.startsWith("editor/")) return "luau";
+  if (lower.endsWith(".json") || lower.endsWith(".scene")) return "json";
+  return "plaintext";
+}
 
 export function LuaEditorPanel({
   openFileRequest,
   onConsumedOpenFileRequest,
+  onFilesMutated,
 }: LuaEditorPanelProps) {
-  const [files, setFiles] = useState<LuaWorkspaceFile[]>([]);
-  const [activePath, setActivePath] = useState<string | null>(null);
-  const [value, setValue] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const {
+    tabs,
+    activePath,
+    loadError,
+    status,
+    setActivePath,
+    upsertTab,
+    setBuffer,
+    closeTab,
+    setLoadError,
+    setStatus,
+  } = useLuaEditorStore(
+    useShallow((s) => ({
+      tabs: s.tabs,
+      activePath: s.activePath,
+      loadError: s.loadError,
+      status: s.status,
+      setActivePath: s.setActivePath,
+      upsertTab: s.upsertTab,
+      setBuffer: s.setBuffer,
+      closeTab: s.closeTab,
+      setLoadError: s.setLoadError,
+      setStatus: s.setStatus,
+    })),
+  );
 
-  const refresh = useCallback(async () => {
-    setLoadError(null);
-    try {
-      const list = await listLuaFiles();
-      setFiles(list);
-      if (list.length === 0) {
-        setActivePath(null);
-        setValue("");
-        setStatus("No .lua files in workspace.");
-        return;
-      }
-      const preferred = list[0].path;
-      setActivePath((prev) =>
-        list.some((f) => f.path === prev) ? prev! : preferred,
-      );
-      setStatus(null);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
+  const activeTab = useMemo(
+    () => tabs.find((t) => t.path === activePath) ?? null,
+    [tabs, activePath],
+  );
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!activePath) return;
-    const f = files.find((x) => x.path === activePath);
-    if (f) setValue(f.content);
-  }, [activePath, files]);
+  const notifyFilesMutated = useCallback(() => {
+    onFilesMutated?.();
+  }, [onFilesMutated]);
 
   useEffect(() => {
     if (!openFileRequest) return;
     const { path, content } = openFileRequest;
     let cancelled = false;
     void (async () => {
-      if (content !== undefined) setValue(content);
-      await refresh();
+      let initial: string;
+      if (content !== undefined) {
+        initial = content;
+      } else {
+        try {
+          initial = await readProjectFile(path);
+        } catch (e) {
+          if (!cancelled) {
+            setLoadError(e instanceof Error ? e.message : String(e));
+          }
+          return;
+        }
+      }
       if (cancelled) return;
-      setActivePath(path);
+      upsertTab(path, initial, false);
+      notifyFilesMutated();
       onConsumedOpenFileRequest?.();
     })();
     return () => {
       cancelled = true;
     };
-  }, [openFileRequest?.id, openFileRequest?.path, openFileRequest?.content, refresh, onConsumedOpenFileRequest]);
+  }, [
+    openFileRequest,
+    upsertTab,
+    notifyFilesMutated,
+    onConsumedOpenFileRequest,
+    setLoadError,
+  ]);
 
   const onSave = useCallback(async () => {
-    if (!activePath) return;
+    if (!activePath || !activeTab) return;
     setStatus(null);
     try {
-      await writeLuaFile(activePath, value);
+      await writeProjectFile(activePath, activeTab.content);
+      setBuffer(activePath, activeTab.content, false);
       setStatus("Saved.");
-      await refresh();
+      notifyFilesMutated();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setLoadError(e instanceof Error ? e.message : String(e));
     }
-  }, [activePath, refresh, value]);
+  }, [
+    activePath,
+    activeTab,
+    setBuffer,
+    setStatus,
+    setLoadError,
+    notifyFilesMutated,
+  ]);
+
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
 
   const beforeMount = useCallback((m: typeof monaco) => {
     registerLuauEditorFeatures(m);
   }, []);
 
+  const onMount = useCallback(
+    (editor: monaco.editor.IStandaloneCodeEditor, m: typeof monaco) => {
+      editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
+        void onSaveRef.current();
+      });
+    },
+    [],
+  );
+
+  const editorValue = activeTab?.content ?? "";
+  const handleEditorChange = useCallback(
+    (v: string | undefined) => {
+      if (!activePath) return;
+      const next = v ?? "";
+      setBuffer(activePath, next, true);
+    },
+    [activePath, setBuffer],
+  );
+
   return (
     <div className="lua-editor-panel">
-      <div className="lua-editor-toolbar">
-        <label className="lua-editor-label">
-          File
-          <select
-            value={activePath ?? ""}
-            onChange={(e) => setActivePath(e.target.value || null)}
-            disabled={files.length === 0}
-          >
-            {files.length === 0 ? (
-              <option value="">—</option>
-            ) : (
-              files.map((f) => (
-                <option key={f.path} value={f.path}>
-                  {f.path}
-                </option>
-              ))
-            )}
-          </select>
-        </label>
-        <button type="button" onClick={() => void onSave()}>
-          Save
-        </button>
-        <button type="button" onClick={() => void refresh()}>
-          Refresh list
-        </button>
-      </div>
       {loadError ? (
         <p className="lua-editor-error">{loadError}</p>
       ) : null}
       {status ? <p className="lua-editor-status">{status}</p> : null}
-      <div className="lua-editor-monaco">
-        <Editor
-          height="100%"
-          width="100%"
-          language="luau"
-          theme="vs-dark"
-          path={activePath ?? "untitled"}
-          value={value}
-          onChange={(v) => setValue(v ?? "")}
-          beforeMount={beforeMount}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 13,
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-          }}
-        />
+      <div className="lua-editor-main">
+        {tabs.length > 0 ? (
+          <div className="lua-editor-tabs" role="tablist">
+            {tabs.map((t) => (
+              <div
+                key={t.path}
+                className={
+                  t.path === activePath
+                    ? "lua-editor-tab lua-editor-tab-active"
+                    : "lua-editor-tab"
+                }
+                role="presentation"
+              >
+                <button
+                  type="button"
+                  className="lua-editor-tab-label"
+                  role="tab"
+                  aria-selected={t.path === activePath}
+                  onClick={() => setActivePath(t.path)}
+                >
+                  {t.path}
+                  {t.dirty ? " ·" : ""}
+                </button>
+                <button
+                  type="button"
+                  className="lua-editor-tab-close"
+                  aria-label={`Close ${t.path}`}
+                  onClick={() => closeTab(t.path)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <div className="lua-editor-monaco">
+          <Editor
+            height="100%"
+            width="100%"
+            language={monacoLanguageForPath(activePath)}
+            theme="vs-dark"
+            path={activePath ?? "untitled"}
+            value={editorValue}
+            onChange={handleEditorChange}
+            beforeMount={beforeMount}
+            onMount={onMount}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 13,
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              readOnly: !activePath,
+            }}
+          />
+        </div>
       </div>
     </div>
   );

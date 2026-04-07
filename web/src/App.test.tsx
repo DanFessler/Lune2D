@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { captureEngineBridgePosts } from "./test/engineBridgeTestUtils";
@@ -16,19 +16,41 @@ describe("App dock layout", () => {
       render(<App />);
 
       expect(screen.getByTitle("Lua")).toBeInTheDocument();
+      expect(screen.getByTitle("Assets")).toBeInTheDocument();
       expect(screen.getByTitle("Game")).toBeInTheDocument();
       expect(screen.getByTitle("Hierarchy")).toBeInTheDocument();
       expect(screen.getByTitle("Inspector")).toBeInTheDocument();
 
       await waitFor(() =>
-        expect(posted.some((m) => m.op === "listLua")).toBe(true),
+        expect(posted.some((m) => m.op === "listProjectDir")).toBe(true),
       );
-      const msg = posted.find((m) => m.op === "listLua");
+      const listMsg = posted.find((m) => m.op === "listProjectDir");
       await act(async () => {
         deliver({
-          requestId: String(msg?.requestId ?? ""),
+          requestId: String(listMsg?.requestId ?? ""),
           ok: true,
-          files: [{ path: "game.lua", content: "-- ok" }],
+          entries: [
+            {
+              name: "game.lua",
+              path: "game.lua",
+              isDirectory: false,
+              size: 4,
+            },
+          ],
+        });
+      });
+      await screen.findByText("game");
+      const luaLabel = screen.getByText("game");
+      fireEvent.doubleClick(luaLabel.parentElement!);
+      await waitFor(() =>
+        expect(posted.some((m) => m.op === "readProjectFile")).toBe(true),
+      );
+      const readMsg = posted.find((m) => m.op === "readProjectFile");
+      await act(async () => {
+        deliver({
+          requestId: String(readMsg?.requestId ?? ""),
+          ok: true,
+          content: "-- ok",
         });
       });
       await waitFor(() =>

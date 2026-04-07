@@ -3,13 +3,11 @@ import { captureEngineBridgePosts } from "./test/engineBridgeTestUtils";
 import {
   installEngineScriptBridgeShim,
   isEngineScriptBridgeAvailable,
-  listLuaFiles,
   reloadBehaviors,
   reloadScripts,
   resetEngineScriptBridgeForTests,
   setGamePaused,
   startSimulation,
-  writeLuaFile,
 } from "./luaEditorBridge";
 
 afterEach(() => {
@@ -33,37 +31,6 @@ describe("isEngineScriptBridgeAvailable", () => {
 });
 
 describe("engine script IPC", () => {
-  it("listLuaFiles resolves with files from native response", async () => {
-    const { posted, deliver } = captureEngineBridgePosts();
-    const p = listLuaFiles();
-    expect(posted.some((m) => m.op === "listLua")).toBe(true);
-    const rid = String(posted.find((m) => m.op === "listLua")?.requestId ?? "");
-    deliver({
-      requestId: rid,
-      ok: true,
-      files: [
-        { path: "game.lua", content: "-- hello" },
-        { path: "game/session.lua", content: "return {}" },
-      ],
-    });
-    const files = await p;
-    expect(files).toHaveLength(2);
-    expect(files[0].path).toBe("game.lua");
-  });
-
-  it("writeLuaFile sends path and content", async () => {
-    const { posted, deliver } = captureEngineBridgePosts();
-    const p = writeLuaFile("game.lua", "x = 1");
-    const msg = posted.find((m) => m.op === "writeLua");
-    expect(msg?.path).toBe("game.lua");
-    expect(msg?.content).toBe("x = 1");
-    deliver({
-      requestId: String(msg?.requestId ?? ""),
-      ok: true,
-    });
-    await p;
-  });
-
   it("reloadScripts sends restartGame op to native", async () => {
     const { posted, deliver } = captureEngineBridgePosts();
     const p = reloadScripts();
@@ -110,27 +77,4 @@ describe("engine script IPC", () => {
     await p;
   });
 
-  it("writeLuaFile rejects when native responds with ok: false", async () => {
-    const { posted, deliver } = captureEngineBridgePosts();
-    const p = writeLuaFile("game.lua", "x=1");
-    const msg = posted.find((m) => m.op === "writeLua");
-    deliver({
-      requestId: String(msg?.requestId ?? ""),
-      ok: false,
-      error: "disk full",
-    });
-    await expect(p).rejects.toThrow("disk full");
-  });
-
-  it("listLuaFiles rejects when native responds with ok: false", async () => {
-    const { posted, deliver } = captureEngineBridgePosts();
-    const p = listLuaFiles();
-    const msg = posted.find((m) => m.op === "listLua");
-    deliver({
-      requestId: String(msg?.requestId ?? ""),
-      ok: false,
-      error: "Lua workspace not configured",
-    });
-    await expect(p).rejects.toThrow("Lua workspace not configured");
-  });
 });

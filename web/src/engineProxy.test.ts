@@ -36,6 +36,14 @@ describe("engine proxy", () => {
     await p;
   });
 
+  it("sends runtime.loadScene with relative path", async () => {
+    const p = engine.runtime.loadScene("scenes/default.scene.json");
+    expect(posted[0].op).toBe("runtime.loadScene");
+    expect(posted[0].args).toEqual(["scenes/default.scene.json"]);
+    deliver({ requestId: String(posted[0].requestId), ok: true });
+    await p;
+  });
+
   it("sends runtime.spawn and returns the result", async () => {
     const p = engine.runtime.spawn("Entity");
     expect(posted[0].op).toBe("runtime.spawn");

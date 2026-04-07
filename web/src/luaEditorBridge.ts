@@ -1,13 +1,11 @@
-export type LuaWorkspaceFile = {
-  path: string;
-  content: string;
-};
-
 export type EngineScriptResponse = {
   requestId: string;
   ok: boolean;
   error?: string;
-  files?: LuaWorkspaceFile[];
+  /** @deprecated Native listLua removed; use projectFileBridge listProjectDir */
+  files?: { path: string; content: string }[];
+  entries?: unknown[];
+  content?: string;
   /** Scene ops (e.g. runtime.spawn) return the native result here */
   result?: unknown;
 };
@@ -101,20 +99,6 @@ export function installEngineScriptBridgeShim(
 
 export function isEngineScriptBridgeAvailable(): boolean {
   return !!window.webkit?.messageHandlers?.engineScript;
-}
-
-type ListLuaResponse = EngineScriptResponse & { files?: LuaWorkspaceFile[] };
-
-export async function listLuaFiles(): Promise<LuaWorkspaceFile[]> {
-  if (!window.__engineScriptBridge) {
-    throw new Error("Engine script bridge not installed");
-  }
-  const res = await window.__engineScriptBridge.call<ListLuaResponse>("listLua", {});
-  return Array.isArray(res.files) ? res.files : [];
-}
-
-export async function writeLuaFile(path: string, content: string): Promise<void> {
-  await window.__engineScriptBridge!.call("writeLua", { path, content });
 }
 
 /**

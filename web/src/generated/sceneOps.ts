@@ -8,6 +8,15 @@ export type SceneOpDef = {
 
 export const sceneOpDefs: SceneOpDef[] = [
   {
+    "op": "runtime.loadScene",
+    "args": [
+      {
+        "name": "relativePath",
+        "type": "string"
+      }
+    ]
+  },
+  {
     "op": "runtime.spawn",
     "args": [
       {
@@ -184,6 +193,7 @@ export const sceneOpDefs: SceneOpDef[] = [
 ];
 
 // Discriminated union of all scene ops
+export type SceneOp_runtime_loadScene = { op: "runtime.loadScene"; args: [string] };
 export type SceneOp_runtime_spawn = { op: "runtime.spawn"; args: [string] };
 export type SceneOp_runtime_destroy = { op: "runtime.destroy"; args: [number] };
 export type SceneOp_runtime_setName = { op: "runtime.setName"; args: [number, string] };
@@ -199,6 +209,7 @@ export type SceneOp_runtime_removeParent = { op: "runtime.removeParent"; args: [
 export type SceneOp_runtime_setTransform = { op: "runtime.setTransform"; args: [number, string, number] };
 
 export type SceneOp =
+  | SceneOp_runtime_loadScene
   | SceneOp_runtime_spawn
   | SceneOp_runtime_destroy
   | SceneOp_runtime_setName
@@ -216,6 +227,7 @@ export type SceneOp =
 export type SceneOpResult = { ok: boolean; error?: string; result?: unknown };
 
 export interface EngineRuntimeApi {
+  loadScene(relativePath: string): Promise<void>;
   spawn(name: string): Promise<number>;
   destroy(id: number): Promise<void>;
   setName(id: number, name: string): Promise<void>;
