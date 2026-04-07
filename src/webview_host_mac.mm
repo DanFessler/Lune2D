@@ -1114,13 +1114,28 @@ bool webview_host_web_overlay_visible() {
 }
 
 // Same geometry as web/index.html postRect — returned JSON survives file:// where postMessage may not.
+// Keep the same overlay-blocking behavior as the web bridge so native polling does not immediately
+// restore the SDL passthrough hole after a menu/dialog opens over the viewport.
 static NSString* const kDomLayoutPollJS =
-    @"(function(){var s=document.getElementById('game-surface');if(!s)return '';var r=s.getBoundingClientRect();"
+    @"(function(){"
+     "var s=document.getElementById('game-surface');if(!s)return '';"
+     "var r=s.getBoundingClientRect();"
      "var root=document.documentElement.getBoundingClientRect();var b=window.__sdlUiBasis||null;"
      "var docW=document.documentElement.clientWidth,docH=document.documentElement.clientHeight;"
      "var uiw=b?Math.min(b.w,docW||b.w):docW;var uih=b?Math.min(b.h,docH||b.h):docH;"
+     "if(r.width<=0||r.height<=0)return JSON.stringify({x:0,y:0,w:0,h:0,uiw:Math.round(uiw),uih:Math.round(uih)});"
+     "var sel='[role=\"dialog\"],[role=\"menu\"],[role=\"listbox\"],[data-radix-popper-content-wrapper]';"
+     "var blocks=Array.prototype.some.call(document.querySelectorAll(sel),function(el){"
+     "var st=window.getComputedStyle(el);"
+     "if(st.display==='none'||st.visibility==='hidden'||st.pointerEvents==='none')return false;"
+     "var o=el.getBoundingClientRect();"
+     "if(o.width<=0||o.height<=0)return false;"
+     "return r.left<o.right&&r.right>o.left&&r.top<o.bottom&&r.bottom>o.top;"
+     "});"
+     "if(blocks)return JSON.stringify({x:0,y:0,w:0,h:0,uiw:Math.round(uiw),uih:Math.round(uih)});"
      "return JSON.stringify({x:Math.round(r.left-root.left),y:Math.round(r.top-root.top),"
-     "w:Math.round(r.width),h:Math.round(r.height),uiw:Math.round(uiw),uih:Math.round(uih)});})()";
+     "w:Math.round(r.width),h:Math.round(r.height),uiw:Math.round(uiw),uih:Math.round(uih)});"
+     "})()";
 
 void webview_host_poll_dom_layout(void) {
     @autoreleasepool {

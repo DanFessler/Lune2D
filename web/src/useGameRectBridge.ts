@@ -1,5 +1,41 @@
 import { useEffect, useRef } from "react";
 
+const PASSTHROUGH_BLOCKING_SELECTOR = [
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  "[data-radix-popper-content-wrapper]",
+].join(", ");
+
+function rectsIntersect(a: DOMRect, b: DOMRect): boolean {
+  return (
+    a.left < b.right &&
+    a.right > b.left &&
+    a.top < b.bottom &&
+    a.bottom > b.top
+  );
+}
+
+function shouldBlockGamePassthrough(surfaceRect: DOMRect): boolean {
+  const overlays = document.querySelectorAll<HTMLElement>(
+    PASSTHROUGH_BLOCKING_SELECTOR,
+  );
+  for (const overlay of overlays) {
+    const style = window.getComputedStyle(overlay);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.pointerEvents === "none"
+    ) {
+      continue;
+    }
+    const rect = overlay.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    if (rectsIntersect(surfaceRect, rect)) return true;
+  }
+  return false;
+}
+
 function uiSpaceDimensions(): { uiw: number; uih: number } {
   const root = document.documentElement.getBoundingClientRect();
   const b = window.__sdlUiBasis;
@@ -49,6 +85,11 @@ export function useGameRectBridge(surface: HTMLDivElement | null) {
         return;
       }
 
+      if (shouldBlockGamePassthrough(r)) {
+        bridge.postMessage({ x: 0, y: 0, w: 0, h: 0, uiw, uih });
+        return;
+      }
+
       const root = document.documentElement.getBoundingClientRect();
       bridge.postMessage({
         x: Math.round(r.left - root.left),
@@ -71,11 +112,19 @@ export function useGameRectBridge(surface: HTMLDivElement | null) {
     window.addEventListener("resize", schedule);
     const ro = new ResizeObserver(schedule);
     ro.observe(surface);
+    const mo = new MutationObserver(schedule);
+    mo.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "hidden", "aria-hidden", "data-state"],
+    });
     schedule();
 
     return () => {
       window.removeEventListener("resize", schedule);
       ro.disconnect();
+      mo.disconnect();
       if (rafRef.current != null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
