@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+
+#include "engine/scene_loader.hpp"
 
 // Stubs for symbols pulled in by scene.cpp (Lua-free test harness).
 lua_State *g_eng_lua_vm = nullptr;
@@ -75,6 +78,37 @@ static int test_set_transform_field_on_entity_without_transform() {
     // Should not crash; silently ignored.
     scene.setTransformField(id, "x", 100.0f);
     TEST_ASSERT(scene.entity(id)->getTransform() == nullptr, "still no transform");
+    return 0;
+}
+
+static int test_native_transform_properties_round_trip() {
+    Scene scene;
+    uint32_t id = scene.spawn("RoundTrip");
+    Entity* e = scene.entity(id);
+    TEST_ASSERT(e != nullptr, "entity should exist");
+    TEST_ASSERT(!e->behaviors.empty(), "entity should have a transform behavior");
+
+    BehaviorSlot& slot = e->behaviors[0];
+    TEST_ASSERT(eng_behavior_slot_set_native_property(
+                    slot, "position", nlohmann::json::array({12.0, -4.0})),
+                "position write should succeed");
+    TEST_ASSERT(eng_behavior_slot_set_native_property(
+                    slot, "velocity", nlohmann::json::array({3.0, 9.0})),
+                "velocity write should succeed");
+    TEST_ASSERT(eng_behavior_slot_set_native_property(
+                    slot, "scale", nlohmann::json::array({2.0, 5.0})),
+                "scale write should succeed");
+    TEST_ASSERT(eng_behavior_slot_set_native_property(slot, "angle", 33.0),
+                "angle write should succeed");
+
+    nlohmann::json props = eng_behavior_slot_native_properties(slot);
+    TEST_ASSERT(props["position"][0] == 12.0 && props["position"][1] == -4.0,
+                "position should serialize as vec2");
+    TEST_ASSERT(props["velocity"][0] == 3.0 && props["velocity"][1] == 9.0,
+                "velocity should serialize as vec2");
+    TEST_ASSERT(props["scale"][0] == 2.0 && props["scale"][1] == 5.0,
+                "scale should serialize as vec2");
+    TEST_ASSERT(props["angle"] == 33.0, "angle should serialize as scalar");
     return 0;
 }
 
@@ -179,6 +213,42 @@ static int test_get_script_behaviors_only() {
     return 0;
 }
 
+static int test_load_scene_prefers_unified_behaviors_over_legacy_fields() {
+    const char* path = "/tmp/lune2d_behavior_loader_prefers_unified.scene.json";
+    {
+        std::ofstream out(path);
+        out <<
+            "{\n"
+            "  \"entities\": [\n"
+            "    {\n"
+            "      \"id\": 1,\n"
+            "      \"name\": \"Ship\",\n"
+            "      \"behaviors\": [\n"
+            "        { \"name\": \"Transform\", \"isNative\": true, \"properties\": { \"position\": [10, 20], \"angle\": 15, \"velocity\": [1, 2], \"scale\": [3, 4] } },\n"
+            "        { \"name\": \"Ship\", \"properties\": { \"speed\": 5 } }\n"
+            "      ],\n"
+            "      \"transform\": { \"x\": 99, \"y\": 99, \"angle\": 99 },\n"
+            "      \"scripts\": [\"Ship\"]\n"
+            "    }\n"
+            "  ]\n"
+            "}\n";
+    }
+
+    Scene scene;
+    TEST_ASSERT(eng_load_scene(scene, path), "scene should load");
+    Entity* e = scene.entity(1);
+    TEST_ASSERT(e != nullptr, "entity should exist");
+    TEST_ASSERT(e->behaviors.size() == 2, "legacy fields should not duplicate behaviors");
+    TEST_ASSERT(e->behaviors[0].name == "Transform", "first behavior should be Transform");
+    TEST_ASSERT(e->behaviors[1].name == "Ship", "second behavior should be Ship");
+    TEST_ASSERT(!e->behaviors[1].isNative, "Ship should remain a script behavior");
+    TEST_ASSERT(std::fabs(e->getTransform()->x - 10.0f) < 0.001f, "unified transform position should win");
+    TEST_ASSERT(std::fabs(e->getTransform()->y - 20.0f) < 0.001f, "unified transform position should win");
+
+    std::remove(path);
+    return 0;
+}
+
 int main() {
     int failures = 0;
 
@@ -188,6 +258,7 @@ int main() {
     RUN(test_add_native_transform_behavior);
     RUN(test_set_transform_field_through_behavior);
     RUN(test_set_transform_field_on_entity_without_transform);
+    RUN(test_native_transform_properties_round_trip);
     RUN(test_behavior_list_ordering);
     RUN(test_behavior_remove);
     RUN(test_behavior_reorder);
@@ -195,6 +266,7 @@ int main() {
     RUN(test_world_matrices_entity_without_transform);
     RUN(test_add_script_backward_compat);
     RUN(test_get_script_behaviors_only);
+    RUN(test_load_scene_prefers_unified_behaviors_over_legacy_fields);
 
 #undef RUN
 

@@ -982,7 +982,8 @@ static NSString* lune2d_shared_settings_full_path(NSString* rel, NSError** outEr
         return;
     }
 
-    if ([op isEqualToString:@"runtime.setScriptProperty"]) {
+    if ([op isEqualToString:@"runtime.setBehaviorProperty"] ||
+        [op isEqualToString:@"runtime.setScriptProperty"]) {
         if (!g_eng_lua_vm) {
             script_bridge_send(
                 @{@"requestId" : rid, @"ok" : @NO, @"error" : @"Lua VM not bound"});
@@ -994,10 +995,10 @@ static NSString* lune2d_shared_settings_full_path(NSString* rel, NSError** outEr
         id        val          = ([args count] > 3) ? args[3] : [NSNull null];
         bool      erase        = (val == nil || val == [NSNull null]);
         nlohmann::json jValue  = erase ? nlohmann::json() : nsBridgeArgToJson(val);
-        bool ok                = eng_scene_mut_set_script_property(
+        bool ok                = eng_scene_mut_set_behavior_property(
             g_eng_lua_vm, eid, si, [keyStr UTF8String], erase, jValue);
         script_bridge_send(ok ? @{@"requestId" : rid, @"ok" : @YES}
-                                : @{@"requestId" : rid, @"ok" : @NO, @"error" : @"setScriptProperty failed"});
+                                : @{@"requestId" : rid, @"ok" : @NO, @"error" : @"setBehaviorProperty failed"});
         return;
     }
 

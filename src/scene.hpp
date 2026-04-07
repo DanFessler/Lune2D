@@ -49,6 +49,13 @@ struct BehaviorSlot
     ScriptInstance script;
 };
 
+/// Current persisted-like property payload for a native behavior slot.
+nlohmann::json eng_behavior_slot_native_properties(const BehaviorSlot& slot);
+
+/// Apply a property write to a native behavior slot. Returns false when unsupported or invalid.
+bool eng_behavior_slot_set_native_property(BehaviorSlot& slot, const char* key,
+                                           const nlohmann::json& value);
+
 struct Entity
 {
     uint32_t id = 0;

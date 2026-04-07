@@ -7,6 +7,7 @@
   { "op": "runtime.setDrawOrder",   "args": [{ "name": "id", "type": "number" }, { "name": "order", "type": "number" }] },
   { "op": "runtime.setUpdateOrder", "args": [{ "name": "id", "type": "number" }, { "name": "order", "type": "number" }] },
   { "op": "runtime.addScript",      "args": [{ "name": "id", "type": "number" }, { "name": "behavior", "type": "string" }] },
+  { "op": "runtime.setBehaviorProperty", "args": [{ "name": "id", "type": "number" }, { "name": "behaviorIndex", "type": "number" }, { "name": "key", "type": "string" }, { "name": "value", "type": "any" }] },
   { "op": "runtime.setScriptProperty", "args": [{ "name": "id", "type": "number" }, { "name": "scriptIndex", "type": "number" }, { "name": "key", "type": "string" }, { "name": "value", "type": "any" }] },
   { "op": "runtime.removeScript",   "args": [{ "name": "id", "type": "number" }, { "name": "index", "type": "number" }] },
   { "op": "runtime.reorderScript",  "args": [{ "name": "id", "type": "number" }, { "name": "fromIndex", "type": "number" }, { "name": "toIndex", "type": "number" }] },

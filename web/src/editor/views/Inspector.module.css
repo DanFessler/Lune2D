@@ -95,7 +95,7 @@
 .behaviorContent {
   padding: 8px;
   display: grid;
-  grid-template-columns: minmax(4rem, 0.4fr) 1fr 1fr;
+  grid-template-columns: minmax(4rem, 1fr) 1fr 1fr;
   gap: 6px 8px;
   align-items: center;
   font-size: 11px;
@@ -278,15 +278,29 @@
   min-width: 0;
 }
 
+.assetThumbButton {
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+
+.assetThumbButton:focus-visible {
+  outline: 2px solid var(--dockable-colors-selected, #588ed4);
+  outline-offset: 2px;
+}
+
 .assetThumb {
   width: 40px;
   height: 40px;
   object-fit: contain;
-  flex-shrink: 0;
   border: 1px solid var(--dockable-colors-borders, #3a3f44);
   border-radius: 3px;
   background-color: #1e2125;
-  background-image: linear-gradient(45deg, #2a2d32 25%, transparent 25%),
+  background-image:
+    linear-gradient(45deg, #2a2d32 25%, transparent 25%),
     linear-gradient(-45deg, #2a2d32 25%, transparent 25%);
   background-size: 8px 8px;
 }
@@ -294,7 +308,6 @@
 .assetThumbPlaceholder {
   width: 40px;
   height: 40px;
-  flex-shrink: 0;
   border: 1px dashed var(--dockable-colors-borders, #3a3f44);
   border-radius: 3px;
   background: var(--dockable-colors-background, #1e2125);

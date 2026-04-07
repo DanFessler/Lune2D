@@ -13,6 +13,9 @@ struct lua_State;
 /// number", not "is an integer" — do not use it to choose float vs int.
 nlohmann::json eng_behavior_lua_number_to_json(lua_State* L, int idx);
 
+/// Converts a Lua value into JSON for behavior property defaults / mutations.
+nlohmann::json eng_behavior_lua_value_to_json(lua_State* L, int idx);
+
 struct BehaviorPropField {
     std::string                name;
     std::string                type;
@@ -30,6 +33,9 @@ struct BehaviorSchema {
 };
 
 void eng_behavior_schema_clear();
+
+/// Registers built-in native behavior schemas (e.g. Transform) into the shared registry.
+void eng_behavior_schema_register_builtin_natives();
 
 /// Reads `properties` from the behavior module table at `moduleStackIndex`.
 void eng_behavior_schema_register_from_module(lua_State* L,

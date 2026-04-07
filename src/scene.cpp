@@ -11,6 +11,30 @@ namespace {
 
 const char *kNativeAttachableBehaviors[] = {"Transform", nullptr};
 
+bool jsonVec2(const nlohmann::json& value, float* outX, float* outY)
+{
+    if (!outX || !outY)
+        return false;
+    if (value.is_array() && value.size() >= 2 && value[0].is_number() && value[1].is_number())
+    {
+        *outX = value[0].get<float>();
+        *outY = value[1].get<float>();
+        return true;
+    }
+    if (value.is_object())
+    {
+        auto itX = value.find("x");
+        auto itY = value.find("y");
+        if (itX != value.end() && itY != value.end() && itX->is_number() && itY->is_number())
+        {
+            *outX = itX->get<float>();
+            *outY = itY->get<float>();
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 bool eng_behavior_name_is_native_attachable(const char *name)
@@ -29,6 +53,83 @@ std::vector<std::string> eng_native_attachable_behavior_names()
     for (int i = 0; kNativeAttachableBehaviors[i]; ++i)
         out.emplace_back(kNativeAttachableBehaviors[i]);
     return out;
+}
+
+// TODO: Generalize native behavior property bridging behind a registry/descriptor
+// (see `docs/plans/2026-04-07-native-behavior-descriptor-registry.plan.md`)
+// so future native behaviors do not need more name-based branches here.
+nlohmann::json eng_behavior_slot_native_properties(const BehaviorSlot& slot)
+{
+    if (!slot.isNative)
+        return nlohmann::json::object();
+    if (slot.name == "Transform")
+    {
+        return nlohmann::json{
+            {"position", {slot.transform.x, slot.transform.y}},
+            {"angle", slot.transform.angle},
+            {"velocity", {slot.transform.vx, slot.transform.vy}},
+            {"scale", {slot.transform.sx, slot.transform.sy}},
+        };
+    }
+    return nlohmann::json::object();
+}
+
+bool eng_behavior_slot_set_native_property(BehaviorSlot& slot, const char* key,
+                                           const nlohmann::json& value)
+{
+    if (!slot.isNative || !key)
+        return false;
+    if (slot.name == "Transform")
+    {
+        Transform& t = slot.transform;
+        float      x = 0.f;
+        float      y = 0.f;
+        if (!std::strcmp(key, "position"))
+        {
+            if (!jsonVec2(value, &x, &y))
+                return false;
+            t.x = x;
+            t.y = y;
+            return true;
+        }
+        if (!std::strcmp(key, "velocity"))
+        {
+            if (!jsonVec2(value, &x, &y))
+                return false;
+            t.vx = x;
+            t.vy = y;
+            return true;
+        }
+        if (!std::strcmp(key, "scale"))
+        {
+            if (!jsonVec2(value, &x, &y))
+                return false;
+            t.sx = x;
+            t.sy = y;
+            return true;
+        }
+        if (!value.is_number())
+            return false;
+        float scalar = value.get<float>();
+        if (!std::strcmp(key, "x"))
+            t.x = scalar;
+        else if (!std::strcmp(key, "y"))
+            t.y = scalar;
+        else if (!std::strcmp(key, "angle"))
+            t.angle = scalar;
+        else if (!std::strcmp(key, "vx"))
+            t.vx = scalar;
+        else if (!std::strcmp(key, "vy"))
+            t.vy = scalar;
+        else if (!std::strcmp(key, "sx"))
+            t.sx = scalar;
+        else if (!std::strcmp(key, "sy"))
+            t.sy = scalar;
+        else
+            return false;
+        return true;
+    }
+    return false;
 }
 
 // ── Entity convenience accessors ──
@@ -251,23 +352,10 @@ void Scene::setTransformField(uint32_t entityId, const char *field, float value)
     Entity *e = entity(entityId);
     if (!e || !field)
         return;
-    Transform *t = e->getTransform();
-    if (!t)
+    int idx = e->getTransformIndex();
+    if (idx < 0)
         return;
-    if (!std::strcmp(field, "x"))
-        t->x = value;
-    else if (!std::strcmp(field, "y"))
-        t->y = value;
-    else if (!std::strcmp(field, "angle"))
-        t->angle = value;
-    else if (!std::strcmp(field, "vx"))
-        t->vx = value;
-    else if (!std::strcmp(field, "vy"))
-        t->vy = value;
-    else if (!std::strcmp(field, "sx"))
-        t->sx = value;
-    else if (!std::strcmp(field, "sy"))
-        t->sy = value;
+    eng_behavior_slot_set_native_property(e->behaviors[idx], field, value);
 }
 
 void Scene::resetScriptStartedFlags()

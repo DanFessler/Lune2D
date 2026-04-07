@@ -64,6 +64,15 @@ describe("engine proxy", () => {
     await p;
   });
 
+  it("sends runtime.setBehaviorProperty with four args", async () => {
+    const p = engine.runtime.setBehaviorProperty(3, 0, "position", [1, 2]);
+    expect(posted[0].op).toBe("runtime.setBehaviorProperty");
+    expect(posted[0].args).toEqual([3, 0, "position", [1, 2]]);
+
+    deliver({ requestId: String(posted[0].requestId), ok: true });
+    await p;
+  });
+
   it("sends runtime.reorderScript with three args", async () => {
     const p = engine.runtime.reorderScript(1, 0, 2);
     expect(posted[0].op).toBe("runtime.reorderScript");

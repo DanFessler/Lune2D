@@ -14,6 +14,35 @@ void eng_behavior_schema_clear() {
     g_behaviorSchemas.clear();
 }
 
+void eng_behavior_schema_register_builtin_natives() {
+    BehaviorSchema transform;
+    BehaviorPropField position;
+    position.name = "position";
+    position.type = "vector";
+    position.defaultValue = nlohmann::json::array({0.0, 0.0});
+    transform.order.push_back(position);
+
+    BehaviorPropField angle;
+    angle.name = "angle";
+    angle.type = "number";
+    angle.defaultValue = 0.0;
+    transform.order.push_back(angle);
+
+    BehaviorPropField velocity;
+    velocity.name = "velocity";
+    velocity.type = "vector";
+    velocity.defaultValue = nlohmann::json::array({0.0, 0.0});
+    transform.order.push_back(velocity);
+
+    BehaviorPropField scale;
+    scale.name = "scale";
+    scale.type = "vector";
+    scale.defaultValue = nlohmann::json::array({1.0, 1.0});
+    transform.order.push_back(scale);
+
+    g_behaviorSchemas["Transform"] = std::move(transform);
+}
+
 nlohmann::json eng_behavior_lua_number_to_json(lua_State* L, int idx) {
     double n = lua_tonumber(L, idx);
     if (!std::isfinite(n))
@@ -26,7 +55,7 @@ nlohmann::json eng_behavior_lua_number_to_json(lua_State* L, int idx) {
     return nlohmann::json(n);
 }
 
-static nlohmann::json luaValueToJson(lua_State* L, int idx) {
+nlohmann::json eng_behavior_lua_value_to_json(lua_State* L, int idx) {
     int t = lua_type(L, idx);
     switch (t) {
     case LUA_TNUMBER:
@@ -38,18 +67,30 @@ static nlohmann::json luaValueToJson(lua_State* L, int idx) {
     case LUA_TNIL:
         return nlohmann::json(nullptr);
     case LUA_TTABLE: {
-        // Heuristic: array-like {n,...} -> json array; else object (not used for defaults v1)
-        size_t       len = lua_objlen(L, idx);
+        int           absIdx = lua_absindex(L, idx);
+        size_t        len = lua_objlen(L, absIdx);
         nlohmann::json arr = nlohmann::json::array();
-        if (len > 0) {
+        bool          arrayLike = len > 0;
+        if (arrayLike) {
             for (size_t i = 1; i <= len; ++i) {
-                lua_rawgeti(L, idx, (int)i);
-                arr.push_back(luaValueToJson(L, -1));
+                lua_rawgeti(L, absIdx, (int)i);
+                if (lua_isnil(L, -1))
+                    arrayLike = false;
+                else
+                    arr.push_back(eng_behavior_lua_value_to_json(L, -1));
                 lua_pop(L, 1);
             }
-            return arr;
+            if (arrayLike)
+                return arr;
         }
-        return nlohmann::json::object();
+        nlohmann::json obj = nlohmann::json::object();
+        lua_pushnil(L);
+        while (lua_next(L, absIdx) != 0) {
+            if (lua_type(L, -2) == LUA_TSTRING)
+                obj[lua_tostring(L, -2)] = eng_behavior_lua_value_to_json(L, -1);
+            lua_pop(L, 1);
+        }
+        return obj;
     }
     default:
         return nlohmann::json(nullptr);
@@ -132,7 +173,7 @@ void eng_behavior_schema_register_from_module(lua_State* L,
         }
 
         lua_getfield(L, descIdx, "default");
-        f.defaultValue = luaValueToJson(L, -1);
+        f.defaultValue = eng_behavior_lua_value_to_json(L, -1);
         lua_pop(L, 1);
 
         lua_getfield(L, descIdx, "min");

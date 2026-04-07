@@ -22,7 +22,7 @@ import {
   type ProjectDirEntry,
 } from "../../projectFileBridge";
 import { PiBoundingBoxFill } from "react-icons/pi";
-import { FaCode, FaCog, FaTimes } from "react-icons/fa";
+import { FaCode, FaTimes } from "react-icons/fa";
 import {
   DndContext,
   closestCorners,
@@ -63,6 +63,19 @@ function parseBehaviorColor(value: unknown): [number, number, number, number] {
   };
   const a = value.length >= 4 ? ch(3, 255) : 255;
   return [ch(0, 255), ch(1, 255), ch(2, 255), a];
+}
+
+function parseBehaviorVector(value: unknown): [number, number] {
+  const ch = (raw: unknown, fallback: number) => {
+    const x = Number(raw);
+    return Number.isFinite(x) ? x : fallback;
+  };
+  if (Array.isArray(value)) return [ch(value[0], 0), ch(value[1], 0)];
+  if (value && typeof value === "object") {
+    const obj = value as { x?: unknown; y?: unknown };
+    return [ch(obj.x, 0), ch(obj.y, 0)];
+  }
+  return [0, 0];
 }
 
 function useComponentCollapseMap(keysSig: string) {
@@ -172,108 +185,27 @@ function CollapsibleBlock({
   );
 }
 
-function EditableVec2({
-  label,
-  x,
-  y,
-  onCommitX,
-  onCommitY,
-}: {
+type InspectorFieldSpec = {
+  key: string;
   label: string;
-  x: number;
-  y: number;
-  onCommitX: (v: number) => void;
-  onCommitY: (v: number) => void;
-}) {
-  const [lx, setLx] = useState(String(x));
-  const [ly, setLy] = useState(String(y));
-  useEffect(() => setLx(String(x)), [x]);
-  useEffect(() => setLy(String(y)), [y]);
+  field: BehaviorPropertyField;
+  value: unknown;
+  onCommit: (value: unknown) => void;
+};
 
-  const commitX = () => {
-    const v = parseFloat(lx);
-    if (Number.isFinite(v) && v !== x) onCommitX(v);
-    else setLx(String(x));
-  };
-  const commitY = () => {
-    const v = parseFloat(ly);
-    if (Number.isFinite(v) && v !== y) onCommitY(v);
-    else setLy(String(y));
-  };
-
-  return (
-    <>
-      <span className={styles.fieldLabel}>{label}</span>
-      <input
-        className={styles.fieldInput}
-        type="number"
-        value={lx}
-        onChange={(e) => setLx(e.target.value)}
-        onBlur={commitX}
-        onKeyDown={(e) => e.key === "Enter" && commitX()}
-        aria-label={`${label} X`}
-      />
-      <input
-        className={styles.fieldInput}
-        type="number"
-        value={ly}
-        onChange={(e) => setLy(e.target.value)}
-        onBlur={commitY}
-        onKeyDown={(e) => e.key === "Enter" && commitY()}
-        aria-label={`${label} Y`}
-      />
-    </>
-  );
-}
-
-function EditableFloat({
+function BehaviorBoolRow({
   label,
   value,
   onCommit,
 }: {
   label: string;
-  value: number;
-  onCommit: (v: number) => void;
-}) {
-  const [local, setLocal] = useState(String(value));
-  useEffect(() => setLocal(String(value)), [value]);
-
-  const commit = () => {
-    const v = parseFloat(local);
-    if (Number.isFinite(v) && v !== value) onCommit(v);
-    else setLocal(String(value));
-  };
-
-  return (
-    <>
-      <span className={styles.fieldLabel}>{label}</span>
-      <input
-        className={`${styles.fieldInput} ${styles.fieldSpan2}`}
-        type="number"
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => e.key === "Enter" && commit()}
-      />
-    </>
-  );
-}
-
-function BehaviorBoolRow({
-  entityId,
-  behaviorIndex,
-  field,
-  value,
-}: {
-  entityId: number;
-  behaviorIndex: number;
-  field: BehaviorPropertyField;
   value: unknown;
+  onCommit: (value: unknown) => void;
 }) {
   const checked = value === true || value === "true";
   return (
     <>
-      <span className={styles.fieldLabel}>{field.name}</span>
+      <span className={styles.fieldLabel}>{label}</span>
       <label
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         style={{ display: "flex", alignItems: "center", gap: 8 }}
@@ -281,14 +213,7 @@ function BehaviorBoolRow({
         <input
           type="checkbox"
           checked={checked}
-          onChange={(e) => {
-            void engine.runtime.setScriptProperty(
-              entityId,
-              behaviorIndex,
-              field.name,
-              e.target.checked,
-            );
-          }}
+          onChange={(e) => onCommit(e.target.checked)}
         />
       </label>
     </>
@@ -317,15 +242,15 @@ function clampColorPopoverPosition(
 }
 
 function BehaviorColorRow({
-  entityId,
-  behaviorIndex,
+  label,
   field,
   value,
+  onCommit,
 }: {
-  entityId: number;
-  behaviorIndex: number;
+  label: string;
   field: BehaviorPropertyField;
   value: unknown;
+  onCommit: (value: unknown) => void;
 }) {
   const [r, g, b, a255] = parseBehaviorColor(value);
   const fromProps: RgbaColor = useMemo(
@@ -389,14 +314,14 @@ function BehaviorColorRow({
 
   const pushColorToEngine = useCallback(
     (c: RgbaColor) => {
-      void engine.runtime.setScriptProperty(entityId, behaviorIndex, field.name, [
+      onCommit([
         Math.max(0, Math.min(255, Math.round(c.r))),
         Math.max(0, Math.min(255, Math.round(c.g))),
         Math.max(0, Math.min(255, Math.round(c.b))),
         Math.max(0, Math.min(255, Math.round(c.a * 255))),
       ]);
     },
-    [entityId, behaviorIndex, field.name],
+    [onCommit],
   );
 
   const onPickerChange = useCallback(
@@ -440,13 +365,13 @@ function BehaviorColorRow({
   return (
     <>
       <span className={styles.fieldLabel} title={field.name}>
-        {field.name}
+        {label}
       </span>
       <div className={styles.colorPopoverWrap} ref={wrapRef}>
         <button
           type="button"
           className={styles.colorSwatchTrigger}
-          aria-label={`${field.name} — open color picker`}
+          aria-label={`${label} — open color picker`}
           aria-expanded={open}
           aria-haspopup="dialog"
           onClick={togglePopover}
@@ -467,15 +392,15 @@ function BehaviorColorRow({
 }
 
 function BehaviorNumberRow({
-  entityId,
-  behaviorIndex,
+  label,
   field,
   value,
+  onCommit,
 }: {
-  entityId: number;
-  behaviorIndex: number;
+  label: string;
   field: BehaviorPropertyField;
   value: unknown;
+  onCommit: (value: unknown) => void;
 }) {
   const n = typeof value === "number" ? value : Number(value);
   const base = Number.isFinite(n) ? n : 0;
@@ -494,7 +419,7 @@ function BehaviorNumberRow({
     if (field.min !== undefined) v = Math.max(field.min, v);
     if (field.max !== undefined) v = Math.min(field.max, v);
     if (field.type === "integer") v = Math.round(v);
-    void engine.runtime.setScriptProperty(entityId, behaviorIndex, field.name, v);
+    onCommit(v);
   };
 
   const useSlider =
@@ -509,7 +434,7 @@ function BehaviorNumberRow({
     if (field.max !== undefined) x = Math.min(field.max, x);
     if (field.type === "integer") x = Math.round(x);
     setLocal(String(x));
-    void engine.runtime.setScriptProperty(entityId, behaviorIndex, field.name, x);
+    onCommit(x);
   };
 
   if (useSlider) {
@@ -524,8 +449,8 @@ function BehaviorNumberRow({
       : min;
     return (
       <>
-        <span className={styles.fieldLabel} title={field.name}>
-          {field.name}
+        <span className={styles.fieldLabel} title={label}>
+          {label}
         </span>
         <input
           type="range"
@@ -534,14 +459,14 @@ function BehaviorNumberRow({
           max={max}
           step={field.type === "integer" ? 1 : "any"}
           value={safe}
-          aria-label={`${field.name} slider`}
+          aria-label={`${label} slider`}
           onChange={(e) => pushLive(parseFloat(e.target.value))}
         />
         <input
           type="number"
           className={styles.fieldInput}
           value={local}
-          aria-label={`${field.name} exact value`}
+          aria-label={`${label} exact value`}
           onChange={(e) => setLocal(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => e.key === "Enter" && commit()}
@@ -552,8 +477,8 @@ function BehaviorNumberRow({
 
   return (
     <>
-      <span className={styles.fieldLabel} title={field.name}>
-        {field.name}
+      <span className={styles.fieldLabel} title={label}>
+        {label}
       </span>
       <input
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
@@ -567,33 +492,84 @@ function BehaviorNumberRow({
   );
 }
 
+function BehaviorVectorRow({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: unknown;
+  onCommit: (value: unknown) => void;
+}) {
+  const [x, y] = parseBehaviorVector(value);
+  const [localX, setLocalX] = useState(String(x));
+  const [localY, setLocalY] = useState(String(y));
+  useEffect(() => setLocalX(String(x)), [x]);
+  useEffect(() => setLocalY(String(y)), [y]);
+
+  const commit = (axis: "x" | "y") => {
+    const nextX = axis === "x" ? parseFloat(localX) : x;
+    const nextY = axis === "y" ? parseFloat(localY) : y;
+    if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+      setLocalX(String(x));
+      setLocalY(String(y));
+      return;
+    }
+    if (nextX === x && nextY === y) {
+      setLocalX(String(x));
+      setLocalY(String(y));
+      return;
+    }
+    onCommit([nextX, nextY]);
+  };
+
+  return (
+    <>
+      <span className={styles.fieldLabel} title={label}>
+        {label}
+      </span>
+      <input
+        className={styles.fieldInput}
+        type="number"
+        value={localX}
+        onChange={(e) => setLocalX(e.target.value)}
+        onBlur={() => commit("x")}
+        onKeyDown={(e) => e.key === "Enter" && commit("x")}
+        aria-label={`${label} X`}
+      />
+      <input
+        className={styles.fieldInput}
+        type="number"
+        value={localY}
+        onChange={(e) => setLocalY(e.target.value)}
+        onBlur={() => commit("y")}
+        onKeyDown={(e) => e.key === "Enter" && commit("y")}
+        aria-label={`${label} Y`}
+      />
+    </>
+  );
+}
+
 function BehaviorEnumRow({
-  entityId,
-  behaviorIndex,
+  label,
   field,
   value,
+  onCommit,
 }: {
-  entityId: number;
-  behaviorIndex: number;
+  label: string;
   field: BehaviorPropertyField;
   value: unknown;
+  onCommit: (value: unknown) => void;
 }) {
   const opts = field.enumOptions!;
   const v = typeof value === "string" ? value : String(value ?? opts[0]);
   return (
     <>
-      <span className={styles.fieldLabel}>{field.name}</span>
+      <span className={styles.fieldLabel}>{label}</span>
       <select
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         value={v}
-        onChange={(e) => {
-          void engine.runtime.setScriptProperty(
-            entityId,
-            behaviorIndex,
-            field.name,
-            e.target.value,
-          );
-        }}
+        onChange={(e) => onCommit(e.target.value)}
       >
         {opts.map((opt) => (
           <option key={opt} value={opt}>
@@ -711,15 +687,15 @@ function AssetPickerModal({
 }
 
 function BehaviorAssetRow({
-  entityId,
-  behaviorIndex,
+  label,
   field,
   value,
+  onCommit,
 }: {
-  entityId: number;
-  behaviorIndex: number;
+  label: string;
   field: BehaviorPropertyField;
   value: unknown;
+  onCommit: (value: unknown) => void;
 }) {
   const v =
     typeof value === "string" ? value : value == null ? "" : String(value);
@@ -754,27 +730,27 @@ function BehaviorAssetRow({
   }, [local]);
 
   const commit = () => {
-    if (local !== v) {
-      void engine.runtime.setScriptProperty(
-        entityId,
-        behaviorIndex,
-        field.name,
-        local,
-      );
-    }
+    if (local !== v) onCommit(local);
   };
 
   return (
     <>
-      <span className={styles.fieldLabel} title={field.name}>
-        {field.name}
+      <span className={styles.fieldLabel} title={label}>
+        {label}
       </span>
       <div className={`${styles.fieldSpan2} ${styles.assetFieldWrap}`}>
-        {thumbDataUrl ? (
-          <img className={styles.assetThumb} src={thumbDataUrl} alt="" />
-        ) : (
-          <div className={styles.assetThumbPlaceholder} aria-hidden />
-        )}
+        <button
+          type="button"
+          className={styles.assetThumbButton}
+          aria-label={`${label} - choose image`}
+          onClick={() => setPickerOpen(true)}
+        >
+          {thumbDataUrl ? (
+            <img className={styles.assetThumb} src={thumbDataUrl} alt="" />
+          ) : (
+            <div className={styles.assetThumbPlaceholder} aria-hidden />
+          )}
+        </button>
         <input
           className={`${styles.fieldInput} ${styles.assetPathInput}`}
           type="text"
@@ -782,27 +758,15 @@ function BehaviorAssetRow({
           onChange={(e) => setLocal(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => e.key === "Enter" && commit()}
-          aria-label={field.name}
+          aria-label={label}
         />
-        <button
-          type="button"
-          className={styles.assetBrowseBtn}
-          onClick={() => setPickerOpen(true)}
-        >
-          Browse…
-        </button>
       </div>
       {pickerOpen ? (
         <AssetPickerModal
           onClose={() => setPickerOpen(false)}
           onPick={(path) => {
             setLocal(path);
-            void engine.runtime.setScriptProperty(
-              entityId,
-              behaviorIndex,
-              field.name,
-              path,
-            );
+            onCommit(path);
             setPickerOpen(false);
           }}
         />
@@ -812,15 +776,15 @@ function BehaviorAssetRow({
 }
 
 function BehaviorStringRow({
-  entityId,
-  behaviorIndex,
+  label,
   field,
   value,
+  onCommit,
 }: {
-  entityId: number;
-  behaviorIndex: number;
+  label: string;
   field: BehaviorPropertyField;
   value: unknown;
+  onCommit: (value: unknown) => void;
 }) {
   const v =
     typeof value === "string" ? value : value == null ? "" : String(value);
@@ -831,17 +795,11 @@ function BehaviorStringRow({
     );
   }, [value, field.name]);
   const commit = () => {
-    if (local !== v)
-      void engine.runtime.setScriptProperty(
-        entityId,
-        behaviorIndex,
-        field.name,
-        local,
-      );
+    if (local !== v) onCommit(local);
   };
   return (
     <>
-      <span className={styles.fieldLabel}>{field.name}</span>
+      <span className={styles.fieldLabel}>{label}</span>
       <input
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         type="text"
@@ -855,15 +813,15 @@ function BehaviorStringRow({
 }
 
 function BehaviorJsonRow({
-  entityId,
-  behaviorIndex,
+  label,
   field,
   value,
+  onCommit,
 }: {
-  entityId: number;
-  behaviorIndex: number;
+  label: string;
   field: BehaviorPropertyField;
   value: unknown;
+  onCommit: (value: unknown) => void;
 }) {
   const raw = (() => {
     try {
@@ -888,28 +846,17 @@ function BehaviorJsonRow({
     const t = field.type;
     if (t === "object" || t === "vector") {
       try {
-        const parsed = JSON.parse(local) as unknown;
-        void engine.runtime.setScriptProperty(
-          entityId,
-          behaviorIndex,
-          field.name,
-          parsed as never,
-        );
+        onCommit(JSON.parse(local) as unknown);
       } catch {
         setLocal(raw);
       }
       return;
     }
-    void engine.runtime.setScriptProperty(
-      entityId,
-      behaviorIndex,
-      field.name,
-      local,
-    );
+    onCommit(local);
   };
   return (
     <>
-      <span className={styles.fieldLabel}>{field.name}</span>
+      <span className={styles.fieldLabel}>{label}</span>
       <textarea
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         rows={3}
@@ -922,26 +869,75 @@ function BehaviorJsonRow({
   );
 }
 
-function BehaviorPropertyRow(props: {
-  entityId: number;
-  behaviorIndex: number;
-  field: BehaviorPropertyField;
-  value: unknown;
-}) {
-  const { field } = props;
-  if (field.type === "boolean") return <BehaviorBoolRow {...props} />;
+function BehaviorPropertyRow({ spec }: { spec: InspectorFieldSpec }) {
+  const { label, field, value, onCommit } = spec;
+  if (field.type === "boolean")
+    return (
+      <BehaviorBoolRow
+        label={label}
+        value={value}
+        onCommit={onCommit}
+      />
+    );
   if (field.type === "number" || field.type === "integer")
-    return <BehaviorNumberRow {...props} />;
-  if (field.type === "color") return <BehaviorColorRow {...props} />;
+    return (
+      <BehaviorNumberRow
+        label={label}
+        field={field}
+        value={value}
+        onCommit={onCommit}
+      />
+    );
+  if (field.type === "vector")
+    return <BehaviorVectorRow label={label} value={value} onCommit={onCommit} />;
+  if (field.type === "color")
+    return (
+      <BehaviorColorRow
+        label={label}
+        field={field}
+        value={value}
+        onCommit={onCommit}
+      />
+    );
   if (
     field.type === "enum" &&
     field.enumOptions &&
     field.enumOptions.length > 0
   )
-    return <BehaviorEnumRow {...props} />;
-  if (field.type === "asset") return <BehaviorAssetRow {...props} />;
-  if (field.type === "string") return <BehaviorStringRow {...props} />;
-  return <BehaviorJsonRow {...props} />;
+    return (
+      <BehaviorEnumRow
+        label={label}
+        field={field}
+        value={value}
+        onCommit={onCommit}
+      />
+    );
+  if (field.type === "asset")
+    return (
+      <BehaviorAssetRow
+        label={label}
+        field={field}
+        value={value}
+        onCommit={onCommit}
+      />
+    );
+  if (field.type === "string")
+    return (
+      <BehaviorStringRow
+        label={label}
+        field={field}
+        value={value}
+        onCommit={onCommit}
+      />
+    );
+  return (
+    <BehaviorJsonRow
+      label={label}
+      field={field}
+      value={value}
+      onCommit={onCommit}
+    />
+  );
 }
 
 function BehaviorPropertyEditor({
@@ -956,54 +952,26 @@ function BehaviorPropertyEditor({
   const fields = comp.propertySchema;
   const vals = comp.propertyValues ?? {};
   if (!fields?.length) return null;
-
-  // For Transform behavior, use setTransform instead of setScriptProperty.
-  if (comp.isNative && comp.name === "Transform") {
-    return (
-      <>
-        {fields.map((f) => {
-          const val = vals[f.name] !== undefined ? vals[f.name] : f.default;
-          const numVal = typeof val === "number" ? val : Number(val) || 0;
-          // Group position/velocity as vec2, angle as float.
-          if (f.name === "x" || f.name === "vx" || f.name === "sx") {
-            const yField = f.name === "x" ? "y" : f.name === "vx" ? "vy" : "sy";
-            const yVal = vals[yField] !== undefined ? vals[yField] : 0;
-            const yNum = typeof yVal === "number" ? yVal : Number(yVal) || 0;
-            const label = f.name === "x" ? "Position" : f.name === "vx" ? "Velocity" : "Scale";
-            return (
-              <EditableVec2
-                key={f.name}
-                label={label}
-                x={numVal}
-                y={yNum}
-                onCommitX={(v) => engine.runtime.setTransform(entityId, f.name, v)}
-                onCommitY={(v) => engine.runtime.setTransform(entityId, yField, v)}
-              />
-            );
-          }
-          if (f.name === "y" || f.name === "vy" || f.name === "sy") return null;
-          return (
-            <EditableFloat
-              key={f.name}
-              label={f.name.charAt(0).toUpperCase() + f.name.slice(1)}
-              value={numVal}
-              onCommit={(v) => engine.runtime.setTransform(entityId, f.name, v)}
-            />
-          );
-        })}
-      </>
-    );
-  }
+  const specs: InspectorFieldSpec[] = fields.map((field) => ({
+    key: field.name,
+    label: field.name,
+    field,
+    value: vals[field.name] !== undefined ? vals[field.name] : field.default,
+    onCommit: (value: unknown) =>
+      engine.runtime.setBehaviorProperty(
+        entityId,
+        behaviorIndex,
+        field.name,
+        value,
+      ),
+  }));
 
   return (
     <>
-      {fields.map((f) => (
+      {specs.map((spec) => (
         <BehaviorPropertyRow
-          key={f.name}
-          entityId={entityId}
-          behaviorIndex={behaviorIndex}
-          field={f}
-          value={vals[f.name] !== undefined ? vals[f.name] : f.default}
+          key={spec.key}
+          spec={spec}
         />
       ))}
     </>

@@ -1,17 +1,17 @@
 // TDD tests for Phase 4: Inspector pairing UX.
 // Validates that behaviors render uniformly with engine/user distinction and pairing indicators.
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import EngineInspector from "./EngineInspector";
 import type { EngineEntity, BehaviorComponent } from "../../engineBridge";
+import { engine } from "../../engineProxy";
 
 vi.mock("../../engineProxy", () => ({
   engine: {
     runtime: {
       setName: vi.fn(),
       setActive: vi.fn(),
-      setTransform: vi.fn(),
       removeScript: vi.fn(),
       reorderScript: vi.fn(),
       setScriptProperty: vi.fn(),
@@ -49,6 +49,10 @@ function makeEntity(
 }
 
 describe("EngineInspector - unified behavior model", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders Transform as a behavior entry (not a special component)", () => {
     const entity = makeEntity("1", [
       makeBehavior("Transform", {
@@ -118,5 +122,68 @@ describe("EngineInspector - unified behavior model", () => {
     const removeButtons = screen.getAllByRole("button", { name: /Remove/ });
     expect(removeButtons.length).toBe(1);
     expect(removeButtons[0].getAttribute("aria-label")).toBe("Remove Ship");
+  });
+
+  it("renders vector properties as two numeric inputs and commits arrays", () => {
+    const entity = makeEntity("7", [
+      makeBehavior("Sprite", {
+        propertyValues: { origin: [0.25, 0.75] },
+        propertySchema: [{ name: "origin", type: "vector", default: [0.5, 0.5] }],
+      }),
+    ]);
+
+    render(<EngineInspector entity={entity} />);
+
+    const xInput = screen.getByLabelText("origin X");
+    const yInput = screen.getByLabelText("origin Y");
+    expect(xInput).toHaveValue(0.25);
+    expect(yInput).toHaveValue(0.75);
+
+    fireEvent.change(xInput, { target: { value: "1.5" } });
+    fireEvent.blur(xInput);
+
+    expect(engine.runtime.setBehaviorProperty).toHaveBeenCalledWith(
+      7,
+      0,
+      "origin",
+      [1.5, 0.75],
+    );
+  });
+
+  it("renders transform vector groups through the shared inspector pipeline", () => {
+    const entity = makeEntity("3", [
+      makeBehavior("Transform", {
+        isNative: true,
+        propertyValues: {
+          position: [10, 20],
+          angle: 45,
+          velocity: [1, 2],
+          scale: [3, 4],
+        },
+        propertySchema: [
+          { name: "position", type: "vector", default: [0, 0] },
+          { name: "angle", type: "number" },
+          { name: "velocity", type: "vector", default: [0, 0] },
+          { name: "scale", type: "vector", default: [1, 1] },
+        ],
+      }),
+    ]);
+
+    render(<EngineInspector entity={entity} />);
+
+    const positionX = screen.getByLabelText("position X");
+    expect(screen.getByLabelText("position Y")).toHaveValue(20);
+    expect(screen.getByLabelText("velocity X")).toHaveValue(1);
+    expect(screen.getByLabelText("scale Y")).toHaveValue(4);
+
+    fireEvent.change(positionX, { target: { value: "12.5" } });
+    fireEvent.blur(positionX);
+
+    expect(engine.runtime.setBehaviorProperty).toHaveBeenCalledWith(
+      3,
+      0,
+      "position",
+      [12.5, 20],
+    );
   });
 });

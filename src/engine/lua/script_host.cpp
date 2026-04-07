@@ -259,6 +259,7 @@ void eng_reload_behaviors(lua_State *L,
     eng_texture_cache_clear();
     g_registered_behaviors.clear();
     eng_behavior_schema_clear();
+    eng_behavior_schema_register_builtin_natives();
     g_scene.releaseAllScriptLuaRefs(L);
 
     size_t bytecodeSize = 0;
@@ -332,6 +333,7 @@ lua_State *eng_create_lua_vm(const std::string &engineLuaDir, const std::string 
     lua_setglobal(L, "package");
 
     eng_behavior_schema_clear();
+    eng_behavior_schema_register_builtin_natives();
     eng_prime_behavior_property_globals(L);
     eng_load_behaviors(L, engineDir + "behaviors/");
     eng_load_behaviors(L, projectDir + "behaviors/");

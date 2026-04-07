@@ -52,46 +52,29 @@ namespace
                                  const std::unordered_set<std::string> &editorPairs)
     {
         bool hasPair = editorPairs.count(b.name) > 0;
-        const char *pairStr = hasPair ? "true" : "false";
-
-        if (b.isNative && b.name == "Transform")
+        nlohmann::json row = nlohmann::json::object();
+        row["type"] = "Behavior";
+        row["name"] = b.name;
+        row["isNative"] = b.isNative;
+        row["hasEditorPair"] = hasPair;
+        if (b.isNative)
         {
-            const Transform &t = b.transform;
-            char buf[600];
-            std::snprintf(buf, sizeof(buf),
-                          "{\"type\":\"Behavior\",\"name\":\"Transform\",\"isNative\":true,"
-                          "\"hasEditorPair\":%s,"
-                          "\"propertyValues\":{\"x\":%.8g,\"y\":%.8g,\"angle\":%.8g,"
-                          "\"vx\":%.8g,\"vy\":%.8g,\"sx\":%.8g,\"sy\":%.8g},"
-                          "\"propertySchema\":["
-                          "{\"name\":\"x\",\"type\":\"number\"},"
-                          "{\"name\":\"y\",\"type\":\"number\"},"
-                          "{\"name\":\"angle\",\"type\":\"number\"},"
-                          "{\"name\":\"vx\",\"type\":\"number\"},"
-                          "{\"name\":\"vy\",\"type\":\"number\"},"
-                          "{\"name\":\"sx\",\"type\":\"number\"},"
-                          "{\"name\":\"sy\",\"type\":\"number\"}"
-                          "]}",
-                          pairStr,
-                          (double)t.x, (double)t.y, (double)t.angle,
-                          (double)t.vx, (double)t.vy, (double)t.sx, (double)t.sy);
-            json += buf;
+            nlohmann::json props = eng_behavior_slot_native_properties(b);
+            if (!props.empty())
+                row["properties"] = props;
+            nlohmann::json values = eng_behavior_merge_properties(b.name.c_str(), props);
+            row["propertyValues"] = values.empty() ? props : values;
         }
-        else if (!b.isNative)
+        else
         {
-            nlohmann::json row = nlohmann::json::object();
-            row["type"] = "Behavior";
-            row["name"] = b.name;
-            row["isNative"] = false;
-            row["hasEditorPair"] = hasPair;
             row["properties"] = b.script.propertyOverrides;
             row["propertyValues"] =
                 eng_behavior_merge_properties(b.script.behavior.c_str(), b.script.propertyOverrides);
-            nlohmann::json sch = eng_behavior_schema_to_editor_json(b.script.behavior.c_str());
-            if (!sch.is_null())
-                row["propertySchema"] = std::move(sch);
-            json += row.dump();
         }
+        nlohmann::json sch = eng_behavior_schema_to_editor_json(b.name.c_str());
+        if (!sch.is_null())
+            row["propertySchema"] = std::move(sch);
+        json += row.dump();
     }
 
 } // namespace

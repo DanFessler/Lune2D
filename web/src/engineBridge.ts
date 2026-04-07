@@ -70,10 +70,21 @@ type LegacyFlatEntity = {
   vy: number;
 };
 
-function isTransformBehavior(c: EngineComponent): boolean {
-  if (c.type === "Behavior" && c.name === "Transform") return true;
-  if (c.type === "Transform") return true;
-  return false;
+function readVec2(value: unknown): { x: number; y: number } {
+  if (Array.isArray(value)) {
+    return {
+      x: Number(value[0]) || 0,
+      y: Number(value[1]) || 0,
+    };
+  }
+  if (value && typeof value === "object") {
+    const obj = value as { x?: unknown; y?: unknown };
+    return {
+      x: Number(obj.x) || 0,
+      y: Number(obj.y) || 0,
+    };
+  }
+  return { x: 0, y: 0 };
 }
 
 /** Extract transform property values from any component format. */
@@ -83,13 +94,17 @@ export function getEntityTransform(
   for (const c of e.components) {
     if (c.type === "Behavior" && c.name === "Transform") {
       const pv = c.propertyValues ?? {};
+      const position =
+        pv.position !== undefined ? readVec2(pv.position) : readVec2([pv.x, pv.y]);
+      const velocity =
+        pv.velocity !== undefined ? readVec2(pv.velocity) : readVec2([pv.vx, pv.vy]);
       return {
         type: "Transform",
-        x: Number(pv.x) || 0,
-        y: Number(pv.y) || 0,
+        x: position.x,
+        y: position.y,
         angle: Number(pv.angle) || 0,
-        vx: Number(pv.vx) || 0,
-        vy: Number(pv.vy) || 0,
+        vx: velocity.x,
+        vy: velocity.y,
       };
     }
     if (c.type === "Transform") return c;

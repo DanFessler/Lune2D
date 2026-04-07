@@ -79,11 +79,19 @@ add_executable(viewport_math_tests tests/viewport_math_test.cpp src/viewport_mat
 target_include_directories(viewport_math_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME viewport_math COMMAND viewport_math_tests)
 
-add_executable(behavior_model_tests tests/behavior_model_test.cpp src/scene.cpp)
+add_executable(behavior_model_tests
+    tests/behavior_model_test.cpp
+    src/scene.cpp
+    src/engine/scene_loader.cpp
+    src/engine/lua/behavior_schema.cpp)
 target_include_directories(behavior_model_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua)
-target_link_libraries(behavior_model_tests PRIVATE nlohmann_json::nlohmann_json)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua
+    ${luau_SOURCE_DIR}/VM/include)
+target_link_libraries(behavior_model_tests PRIVATE
+    SDL3::SDL3
+    Luau.VM
+    nlohmann_json::nlohmann_json)
 add_test(NAME behavior_model COMMAND behavior_model_tests)
 
 add_executable(editor_input_tests tests/editor_input_test.cpp

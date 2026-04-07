@@ -12,6 +12,9 @@ void eng_lua_bind_main_vm(lua_State *L);
 bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int scriptIndex,
                                        const char *key, bool erase, const nlohmann::json &value);
 
+bool eng_scene_mut_set_behavior_property(lua_State *L, uint32_t entityId, int behaviorIndex,
+                                         const char *key, bool erase, const nlohmann::json &value);
+
 /// Call `start` (once) + `update` on behavior tables for entities (sorted by update order).
 void eng_scene_update_lua_scripts(lua_State *L, Scene &scene, float dt);
 

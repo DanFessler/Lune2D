@@ -24,9 +24,9 @@ void eng_lua_bind_main_vm(lua_State *L)
     g_eng_lua_vm = L;
 }
 
-bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int behaviorIndex,
-                                       const char *key, bool erase,
-                                       const nlohmann::json &value)
+bool eng_scene_mut_set_behavior_property(lua_State *L, uint32_t entityId, int behaviorIndex,
+                                         const char *key, bool erase,
+                                         const nlohmann::json &value)
 {
     Entity *e = g_scene.entity(entityId);
     if (!e || behaviorIndex < 0 || behaviorIndex >= (int)e->behaviors.size() || !key)
@@ -34,18 +34,7 @@ bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int beha
     BehaviorSlot &slot = e->behaviors[behaviorIndex];
     if (slot.isNative)
     {
-        if (slot.name == "Transform")
-        {
-            if (!erase)
-            {
-                float fval = 0.0f;
-                if (value.is_number())
-                    fval = value.get<float>();
-                g_scene.setTransformField(entityId, key, fval);
-            }
-            return true;
-        }
-        return false;
+        return !erase && eng_behavior_slot_set_native_property(slot, key, value);
     }
     ScriptInstance &sc = slot.script;
     if (erase)
@@ -54,6 +43,13 @@ bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int beha
         sc.propertyOverrides[key] = value;
     eng_behavior_release_script_self(L, sc);
     return true;
+}
+
+bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int behaviorIndex,
+                                       const char *key, bool erase,
+                                       const nlohmann::json &value)
+{
+    return eng_scene_mut_set_behavior_property(L, entityId, behaviorIndex, key, erase, value);
 }
 
 static nlohmann::json luaTableToJsonObject(lua_State *L, int idx)
@@ -141,17 +137,26 @@ static int l_runtime_setScriptProperty(lua_State *L)
             luaL_error(L, "setScriptProperty: bad entity or script index");
         return 0;
     }
-    nlohmann::json v;
-    if (lua_isboolean(L, 4))
-        v = lua_toboolean(L, 4) != 0;
-    else if (lua_type(L, 4) == LUA_TNUMBER)
-        v = eng_behavior_lua_number_to_json(L, 4);
-    else if (lua_isstring(L, 4))
-        v = std::string(lua_tostring(L, 4));
-    else
-        luaL_error(L, "setScriptProperty: value must be boolean, number, string, or nil");
+    nlohmann::json v = eng_behavior_lua_value_to_json(L, 4);
     if (!eng_scene_mut_set_script_property(L, eid, si, key, false, v))
         luaL_error(L, "setScriptProperty: bad entity or script index");
+    return 0;
+}
+
+static int l_runtime_setBehaviorProperty(lua_State *L)
+{
+    uint32_t eid = (uint32_t)luaL_checkinteger(L, 1);
+    int bi = (int)luaL_checkinteger(L, 2);
+    const char *key = luaL_checkstring(L, 3);
+    if (lua_gettop(L) < 4 || lua_isnil(L, 4))
+    {
+        if (!eng_scene_mut_set_behavior_property(L, eid, bi, key, true, nlohmann::json()))
+            luaL_error(L, "setBehaviorProperty: bad entity or behavior index");
+        return 0;
+    }
+    nlohmann::json v = eng_behavior_lua_value_to_json(L, 4);
+    if (!eng_scene_mut_set_behavior_property(L, eid, bi, key, false, v))
+        luaL_error(L, "setBehaviorProperty: bad entity, behavior index, or value");
     return 0;
 }
 
@@ -601,6 +606,8 @@ void eng_lua_register_runtime(lua_State *L)
     lua_setfield(L, -2, "addScript");
     lua_pushcfunction(L, l_runtime_setScriptProperty, "runtime.setScriptProperty");
     lua_setfield(L, -2, "setScriptProperty");
+    lua_pushcfunction(L, l_runtime_setBehaviorProperty, "runtime.setBehaviorProperty");
+    lua_setfield(L, -2, "setBehaviorProperty");
     lua_pushcfunction(L, l_runtime_setDrawOrder, "runtime.setDrawOrder");
     lua_setfield(L, -2, "setDrawOrder");
     lua_pushcfunction(L, l_runtime_setUpdateOrder, "runtime.setUpdateOrder");
