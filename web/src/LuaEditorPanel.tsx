@@ -39,25 +39,21 @@ export function LuaEditorPanel({
     tabs,
     activePath,
     loadError,
-    status,
     setActivePath,
     upsertTab,
     setBuffer,
     closeTab,
     setLoadError,
-    setStatus,
   } = useLuaEditorStore(
     useShallow((s) => ({
       tabs: s.tabs,
       activePath: s.activePath,
       loadError: s.loadError,
-      status: s.status,
       setActivePath: s.setActivePath,
       upsertTab: s.upsertTab,
       setBuffer: s.setBuffer,
       closeTab: s.closeTab,
       setLoadError: s.setLoadError,
-      setStatus: s.setStatus,
     })),
   );
 
@@ -106,23 +102,14 @@ export function LuaEditorPanel({
 
   const onSave = useCallback(async () => {
     if (!activePath || !activeTab) return;
-    setStatus(null);
     try {
       await writeProjectFile(activePath, activeTab.content);
       setBuffer(activePath, activeTab.content, false);
-      setStatus("Saved.");
       notifyFilesMutated();
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
     }
-  }, [
-    activePath,
-    activeTab,
-    setBuffer,
-    setStatus,
-    setLoadError,
-    notifyFilesMutated,
-  ]);
+  }, [activePath, activeTab, setBuffer, setLoadError, notifyFilesMutated]);
 
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
@@ -155,7 +142,6 @@ export function LuaEditorPanel({
       {loadError ? (
         <p className="lua-editor-error">{loadError}</p>
       ) : null}
-      {status ? <p className="lua-editor-status">{status}</p> : null}
       <div className="lua-editor-main">
         {tabs.length > 0 ? (
           <div className="lua-editor-tabs" role="tablist">

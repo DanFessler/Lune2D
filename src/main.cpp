@@ -414,8 +414,8 @@ int main(int argc, char *argv[])
         eng_scene_update_editor_behaviors(L, g_scene, dt);
         editor_bridge_publish_scene_snapshot(g_scene);
 
-        SDL_SetRenderDrawColor(g_eng.renderer, 0, 0, 0, 255);
-        SDL_RenderClear(g_eng.renderer);
+        // Background: chrome + black game inset are applied in webview_apply_game_viewport
+        // (SDL_RenderClear clears the entire target and would wipe letterboxing to black).
         eng_scene_draw_lua_scripts(L, g_scene, totalTime);
         eng_scene_draw_editor_overlays(L, g_scene, totalTime);
         SDL_RenderPresent(g_eng.renderer);

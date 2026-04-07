@@ -10,21 +10,18 @@ export type LuaEditorSlice = {
   tabs: LuaEditorTab[];
   activePath: string | null;
   loadError: string | null;
-  status: string | null;
   setActivePath: (path: string | null) => void;
   upsertTab: (path: string, content: string, dirty: boolean) => void;
   /** Updates buffer for `path`; no-op if tab missing. */
   setBuffer: (path: string, content: string, dirty: boolean) => void;
   closeTab: (path: string) => void;
   setLoadError: (msg: string | null) => void;
-  setStatus: (msg: string | null) => void;
 };
 
 const initialState = {
   tabs: [] as LuaEditorTab[],
   activePath: null as string | null,
   loadError: null as string | null,
-  status: null as string | null,
 };
 
 export const useLuaEditorStore = create<LuaEditorSlice>((set) => ({
@@ -51,6 +48,8 @@ export const useLuaEditorStore = create<LuaEditorSlice>((set) => ({
     set((s) => {
       const i = s.tabs.findIndex((t) => t.path === path);
       if (i < 0) return s;
+      const cur = s.tabs[i];
+      if (cur.content === content && cur.dirty === dirty) return s;
       const next = [...s.tabs];
       next[i] = { path, content, dirty };
       return { tabs: next };
@@ -70,8 +69,6 @@ export const useLuaEditorStore = create<LuaEditorSlice>((set) => ({
     }),
 
   setLoadError: (msg) => set({ loadError: msg }),
-
-  setStatus: (msg) => set({ status: msg }),
 }));
 
 /** Vitest: isolate editor state between tests. */

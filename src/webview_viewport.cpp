@@ -1,9 +1,20 @@
 #include "webview_host.hpp"
 #include "viewport_math.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <algorithm>
 #include <cstdlib>
 #include <cmath>
+
+namespace
+{
+
+    // Match web HUD dark `--dockable-colors-gap` (see `dockableShellTheme.ts` / Dockable.Root):
+    // dock padding and transparent DOM stacks should read as the same tone as SDL behind WKWebView.
+    constexpr Uint8 kEditorChromeR = 24, kEditorChromeG = 24, kEditorChromeB = 26;
+
+} // namespace
 
 void webview_apply_game_viewport(SDL_Renderer *renderer,
                                  SDL_Window *window,
@@ -55,9 +66,13 @@ void webview_apply_game_viewport(SDL_Renderer *renderer,
     if (out_lu_h)
         *out_lu_h = lay.lu_h;
 
-    SDL_SetRenderDrawColor(renderer, 12, 14, 22, 255);
+    // Full-target clear (SDL_RenderClear ignores viewport). Single chrome color for the whole
+    // framebuffer: letterboxing, unmounted full surface, and the game hole before Luau draws.
+    // (Do not pre-fill the game rect black — that masked the dock gutter and read as “wrong”
+    // letterboxing through the transparent #game-surface.)
     SDL_SetRenderViewport(renderer, nullptr);
     SDL_SetRenderScale(renderer, 1.f, 1.f);
+    SDL_SetRenderDrawColor(renderer, kEditorChromeR, kEditorChromeG, kEditorChromeB, 255);
     SDL_RenderClear(renderer);
 
     // SDL3: the GPU clip rectangle is pixel_viewport = ceil(viewport * current_scale) (see

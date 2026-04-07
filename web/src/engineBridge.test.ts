@@ -5,6 +5,7 @@ import {
   compareEntitySiblingOrder,
   getEntityTransform,
   hierarchyLayoutSignature,
+  engineEntityListsSnapshotEqual,
   normalizeEngineEntityPayload,
   type BehaviorComponent,
   type EngineEntity,
@@ -33,6 +34,47 @@ function ent(
     ],
   };
 }
+
+describe("engineEntityListsSnapshotEqual", () => {
+  it("is true for identical content with distinct object references", () => {
+    const a = [ent("1"), ent("2")];
+    const b = [
+      { ...ent("1") },
+      {
+        ...ent("2"),
+        components: [{ ...ent("2").components[0] } as BehaviorComponent],
+      },
+    ];
+    expect(engineEntityListsSnapshotEqual(a, b)).toBe(true);
+    expect(a[0]).not.toBe(b[0]);
+  });
+
+  it("is false when a numeric field changes", () => {
+    const a = [ent("1")];
+    const b = [
+      {
+        ...ent("1"),
+        components: [
+          {
+            type: "Behavior" as const,
+            name: "Transform",
+            isNative: true,
+            propertyValues: {
+              x: 1,
+              y: 0,
+              angle: 0,
+              vx: 0,
+              vy: 0,
+              sx: 1,
+              sy: 1,
+            },
+          },
+        ],
+      },
+    ];
+    expect(engineEntityListsSnapshotEqual(a, b)).toBe(false);
+  });
+});
 
 describe("compareEntitySiblingOrder", () => {
   it("orders by drawOrder then numeric id", () => {

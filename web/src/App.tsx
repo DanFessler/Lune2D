@@ -16,7 +16,15 @@ import { listBehaviors } from "./luaEditorBridge";
 import { engine, unwrapSceneNumber } from "./engineProxy";
 import { useEngineEntities } from "./useEngineEntities";
 import { useGameRectBridge } from "./useGameRectBridge";
+import { dockableShellCssVars, type DockablePaletteName } from "./dockableShellTheme";
 import "./App.css";
+
+/** Single source for dock chrome: must match `dockableShellCssVars` + `Dockable.Root`. */
+const DOCKABLE_CHROME: {
+  theme: DockablePaletteName;
+  gap: number;
+  radius: number;
+} = { theme: "dark", gap: 4, radius: 4 };
 
 export default function App() {
   const [gameSurface, setGameSurface] = useState<HTMLDivElement | null>(null);
@@ -168,10 +176,22 @@ export default function App() {
   );
 
   return (
-    <div className="hud-shell">
+    <div
+      className="hud-shell"
+      style={dockableShellCssVars(
+        DOCKABLE_CHROME.theme,
+        DOCKABLE_CHROME.gap,
+        DOCKABLE_CHROME.radius,
+      )}
+    >
       <Toolbar />
       <div className="hud-dock">
-        <Dockable.Root orientation="row" theme="dark" gap={4} radius={4}>
+        <Dockable.Root
+          orientation="row"
+          theme={DOCKABLE_CHROME.theme}
+          gap={DOCKABLE_CHROME.gap}
+          radius={DOCKABLE_CHROME.radius}
+        >
           <Dockable.Panel size={2}>
             <Dockable.Tab
               id="left-hierarchy"

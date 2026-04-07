@@ -150,6 +150,19 @@ export function normalizeEngineEntityPayload(raw: unknown): EngineEntity[] {
   return out;
 }
 
+/**
+ * Snapshot equality for native→web entity arrays (same JSON encoder → stable ordering/keys).
+ * Used to avoid React re-renders and downstream effect churn when the scene snapshot is unchanged.
+ */
+export function engineEntityListsSnapshotEqual(
+  a: EngineEntity[],
+  b: EngineEntity[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** Match native `forEachEntitySortedByDrawOrder`: drawOrder asc, then id asc. */
 export function compareEntitySiblingOrder(
   a: EngineEntity,

@@ -17,19 +17,13 @@
   flex-shrink: 0;
 }
 
-.lua-editor-status {
-  margin: 2px 8px;
-  font-size: 11px;
-  color: #8c8;
-  flex-shrink: 0;
-}
-
 .lua-editor-main {
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  border: 3px solid var(--dockable-colors-headers);
 }
 
 .lua-editor-tabs {

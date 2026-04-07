@@ -953,9 +953,14 @@ static TransNavDelegate* s_nav = nil;
     int x = nx.intValue, y = ny.intValue, w = nw.intValue, h = nh.intValue;
     int uiw = nuiw ? nuiw.intValue : 0;
     int uih = nuih ? nuih.intValue : 0;
+    // Always sync: when the game "hole" is gone or has no area, clear passthrough so
+    // hitTest no longer steals clicks where the viewport used to be.
     if (w > 0 && h > 0) {
         s_game_passthrough_rect = NSMakeRect(x, y, w, h);
         s_rectCb(x, y, w, h, uiw, uih, s_rectUser);
+    } else {
+        s_game_passthrough_rect = NSZeroRect;
+        s_rectCb(0, 0, 0, 0, uiw, uih, s_rectUser);
     }
 }
 @end
@@ -1016,8 +1021,14 @@ void webview_host_poll_dom_layout(void) {
                 if (![result isKindOfClass:[NSString class]])
                     return;
                 NSString* json = (NSString*)result;
-                if (json.length == 0)
+                if (json.length == 0) {
+                    s_game_passthrough_rect = NSZeroRect;
+                    int uw = 0, uh = 0;
+                    webview_host_get_layout_basis(&uw, &uh);
+                    if (s_rectCb)
+                        s_rectCb(0, 0, 0, 0, uw, uh, s_rectUser);
                     return;
+                }
                 NSData* data = [json dataUsingEncoding:NSUTF8StringEncoding];
                 NSError* je = nil;
                 id obj = [NSJSONSerialization JSONObjectWithData:data options:0 error:&je];
@@ -1034,6 +1045,9 @@ void webview_host_poll_dom_layout(void) {
                 if (w > 0 && h > 0) {
                     s_game_passthrough_rect = NSMakeRect(x, y, w, h);
                     s_rectCb(x, y, w, h, uiw, uih, s_rectUser);
+                } else {
+                    s_game_passthrough_rect = NSZeroRect;
+                    s_rectCb(0, 0, 0, 0, uiw, uih, s_rectUser);
                 }
             }];
     }

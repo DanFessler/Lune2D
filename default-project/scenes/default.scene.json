@@ -1,7 +1,7 @@
 {
   "entities": [
     {
-      "drawOrder": 100,
+      "drawOrder": -1000,
       "id": 1,
       "name": "GameDirector",
       "scripts": [

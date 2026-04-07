@@ -1,9 +1,9 @@
 /* Shell: fill WKWebView; flex column so toolbar + dock share the viewport */
 
 /*
- * Dockable sets these only on its Root <div>, so siblings (e.g. .app-toolbar) never
- * see them. Mirror theme="darker" + gap={6} + radius={6} here so chrome above the
- * dock matches. Dockable.Root still overrides on its container for panel internals.
+ * Dockable sets theme variables only on its Root <div>, so siblings (toolbar) never
+ * see them. `App.tsx` applies `dockableShellCssVars(DOCKABLE_CHROME)` on `.hud-shell`
+ * so toolbar / borders match `Dockable.Root` from one config.
  */
 .hud-shell {
   position: fixed;
@@ -14,18 +14,6 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  --dockable-radius: 6px;
-  --dockable-gap: 6px;
-  --dockable-colors-headers: rgb(39, 44, 53);
-  --dockable-colors-selected: rgb(46, 104, 162);
-  --dockable-colors-background: rgb(31, 36, 43);
-  --dockable-colors-content: rgb(46, 49, 54);
-  --dockable-colors-document: rgb(13, 13, 14);
-  --dockable-colors-border: rgba(0, 0, 0, 0.15);
-  --dockable-colors-text: rgb(200, 207, 211);
-  --dockable-colors-gap: rgb(20, 20, 20);
-  --dockable-colors-input: rgba(0, 0, 0, 0.2);
-  --dockable-colors-inputText: rgb(200, 207, 211);
 }
 
 .hud-dock {
@@ -50,6 +38,7 @@
   display: flex;
   flex-direction: column;
   background: transparent !important;
+  border: 3px solid var(--dockable-colors-headers);
 }
 
 #game-surface {
@@ -57,7 +46,6 @@
   min-height: 0;
   box-sizing: border-box;
   background: transparent !important;
-  border: 3px solid var(--dockable-colors-headers);
   pointer-events: none;
 }
 

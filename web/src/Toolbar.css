@@ -4,7 +4,7 @@
   gap: 10px;
   padding: 4px 10px;
   /* Same strip as .lua-editor-toolbar; vars from .hud-shell outside Dockable.Root */
-  background: var(--dockable-colors-headers);
+  background: var(--dockable-colors-content);
   border-bottom: 1px solid var(--dockable-colors-border);
   flex-shrink: 0;
   height: 32px;
@@ -32,7 +32,9 @@
   font-size: 12px;
   padding: 0;
   line-height: 1;
-  transition: background 0.1s, color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s;
 }
 
 .toolbar-btn:hover:not(:disabled) {
