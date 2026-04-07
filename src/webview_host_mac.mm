@@ -436,6 +436,69 @@ static void script_bridge_send(NSDictionary* payload) {
     });
 }
 
+/// Single path segment only: `editor-dock-layout.json`, etc.
+static BOOL lune2d_shared_settings_rel_path_ok(NSString* rel) {
+    if (![rel isKindOfClass:[NSString class]] || !rel.length)
+        return NO;
+    if ([rel containsString:@"/"] || [rel containsString:@"\\"])
+        return NO;
+    if ([rel isEqualToString:@"."] || [rel isEqualToString:@".."])
+        return NO;
+    for (NSUInteger i = 0; i < rel.length; i++) {
+        unichar c = [rel characterAtIndex:i];
+        BOOL ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                  c == '.' || c == '_' || c == '-';
+        if (!ok)
+            return NO;
+    }
+    return YES;
+}
+
+static NSString* lune2d_application_support_lune2d_dir(NSError** outErr) {
+    NSArray* paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+    if (!paths.count) {
+        if (outErr)
+            *outErr = [NSError errorWithDomain:@"bridge" code:20
+                                       userInfo:@{NSLocalizedDescriptionKey : @"No Application Support directory"}];
+        return nil;
+    }
+    NSString*      base = paths[0];
+    NSString*      dir = [base stringByAppendingPathComponent:@"Lune2D"];
+    NSFileManager* fm  = [NSFileManager defaultManager];
+    NSError*       err = nil;
+    if (![fm fileExistsAtPath:dir]) {
+        if (![fm createDirectoryAtPath:dir
+                withIntermediateDirectories:YES
+                                 attributes:nil
+                                      error:&err]) {
+            if (outErr)
+                *outErr = err;
+            return nil;
+        }
+    }
+    return dir;
+}
+
+static NSString* lune2d_shared_settings_full_path(NSString* rel, NSError** outErr) {
+    if (!lune2d_shared_settings_rel_path_ok(rel)) {
+        if (outErr)
+            *outErr = [NSError errorWithDomain:@"bridge" code:21
+                                      userInfo:@{NSLocalizedDescriptionKey : @"Invalid relPath"}];
+        return nil;
+    }
+    NSString* dir = lune2d_application_support_lune2d_dir(outErr);
+    if (!dir.length)
+        return nil;
+    NSString* full = [dir stringByAppendingPathComponent:rel];
+    if (!path_is_under_root(full, dir)) {
+        if (outErr)
+            *outErr = [NSError errorWithDomain:@"bridge" code:22
+                                      userInfo:@{NSLocalizedDescriptionKey : @"Path outside support directory"}];
+        return nil;
+    }
+    return full;
+}
+
 @implementation EngineScriptBridge
 - (void)userContentController:(WKUserContentController*)userContentController
       didReceiveScriptMessage:(WKScriptMessage*)message {
@@ -449,6 +512,62 @@ static void script_bridge_send(NSDictionary* payload) {
     NSString*     op  = d[@"op"];
     if (![rid isKindOfClass:[NSString class]] || !rid.length || ![op isKindOfClass:[NSString class]])
         return;
+
+    if ([op isEqualToString:@"readSharedSettingsFile"]) {
+        NSString* rel = d[@"relPath"];
+        NSError*   pathErr = nil;
+        NSString*  full    = lune2d_shared_settings_full_path(rel, &pathErr);
+        if (!full) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : pathErr.localizedDescription ?: @"Invalid path"
+            });
+            return;
+        }
+        if (![[NSFileManager defaultManager] fileExistsAtPath:full]) {
+            script_bridge_send(
+                @{@"requestId" : rid, @"ok" : @NO, @"error" : @"not found"});
+            return;
+        }
+        NSError*  err  = nil;
+        NSString* text = [NSString stringWithContentsOfFile:full encoding:NSUTF8StringEncoding error:&err];
+        if (!text) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : err.localizedDescription ?: @"read failed"
+            });
+            return;
+        }
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"content" : text});
+        return;
+    }
+
+    if ([op isEqualToString:@"writeSharedSettingsFile"]) {
+        NSString* rel     = d[@"relPath"];
+        NSString* content = d[@"content"];
+        if (![content isKindOfClass:[NSString class]])
+            content = @"";
+        NSError*  pathErr = nil;
+        NSString* full    = lune2d_shared_settings_full_path(rel, &pathErr);
+        if (!full) {
+            script_bridge_send(@{
+                @"requestId" : rid,
+                @"ok" : @NO,
+                @"error" : pathErr.localizedDescription ?: @"Invalid path"
+            });
+            return;
+        }
+        NSError* werr = nil;
+        if (![content writeToFile:full atomically:YES encoding:NSUTF8StringEncoding error:&werr]) {
+            script_bridge_send(
+                @{@"requestId" : rid, @"ok" : @NO, @"error" : werr.localizedDescription ?: @"write failed"});
+            return;
+        }
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
+        return;
+    }
 
     if ([op isEqualToString:@"listProjectDir"]) {
         if (s_lua_workspace.empty()) {

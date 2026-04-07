@@ -15,6 +15,20 @@ describe("App dock layout", () => {
       const { posted, deliver } = captureEngineBridgePosts();
       render(<App />);
 
+      await waitFor(() =>
+        expect(posted.some((m) => m.op === "readSharedSettingsFile")).toBe(
+          true,
+        ),
+      );
+      const dockLayoutMsg = posted.find((m) => m.op === "readSharedSettingsFile");
+      await act(async () => {
+        deliver({
+          requestId: String(dockLayoutMsg?.requestId ?? ""),
+          ok: false,
+          error: "not found",
+        });
+      });
+
       expect(screen.getByTitle("Lua")).toBeInTheDocument();
       expect(screen.getByTitle("Assets")).toBeInTheDocument();
       expect(screen.getByTitle("Game")).toBeInTheDocument();

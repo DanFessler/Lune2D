@@ -1,4 +1,5 @@
 import { Dockable } from "@danfessler/react-dockable";
+import type { LayoutNode } from "@danfessler/react-dockable";
 import "@danfessler/react-dockable/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AssetBrowser from "./editor/views/AssetBrowser";
@@ -17,6 +18,10 @@ import { engine, unwrapSceneNumber } from "./engineProxy";
 import { useEngineEntities } from "./useEngineEntities";
 import { useGameRectBridge } from "./useGameRectBridge";
 import { dockableShellCssVars, type DockablePaletteName } from "./dockableShellTheme";
+import {
+  loadEditorDockLayout,
+  saveEditorDockLayout,
+} from "./editorLayoutStorage";
 import "./App.css";
 
 /** Single source for dock chrome: must match `dockableShellCssVars` + `Dockable.Root`. */
@@ -38,6 +43,46 @@ export default function App() {
     useState<LuaEditorOpenRequest | null>(null);
   const luaOpenSeq = useRef(0);
   const [assetBrowserRefreshKey, setAssetBrowserRefreshKey] = useState(0);
+
+  const [dockBootKey, setDockBootKey] = useState(0);
+  const [restoredDockLayout, setRestoredDockLayout] = useState<
+    LayoutNode[] | undefined
+  >(undefined);
+  const dockLayoutSaveOkRef = useRef(false);
+  const dockSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadEditorDockLayout().then((layout) => {
+      if (cancelled) return;
+      if (layout) {
+        setRestoredDockLayout(layout);
+        setDockBootKey((k) => k + 1);
+      }
+      requestAnimationFrame(() => {
+        if (!cancelled) dockLayoutSaveOkRef.current = true;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (dockSaveTimerRef.current) clearTimeout(dockSaveTimerRef.current);
+    },
+    [],
+  );
+
+  const onDockLayoutChange = useCallback((panels: LayoutNode[]) => {
+    if (!dockLayoutSaveOkRef.current) return;
+    if (dockSaveTimerRef.current) clearTimeout(dockSaveTimerRef.current);
+    dockSaveTimerRef.current = setTimeout(() => {
+      dockSaveTimerRef.current = null;
+      void saveEditorDockLayout(panels);
+    }, 400);
+  }, []);
 
   const focusLuaFile = useCallback((path: string, content?: string) => {
     luaOpenSeq.current += 1;
@@ -187,10 +232,13 @@ export default function App() {
       <Toolbar />
       <div className="hud-dock">
         <Dockable.Root
+          key={dockBootKey}
+          layout={restoredDockLayout}
           orientation="row"
           theme={DOCKABLE_CHROME.theme}
           gap={DOCKABLE_CHROME.gap}
           radius={DOCKABLE_CHROME.radius}
+          onChange={onDockLayoutChange}
         >
           <Dockable.Panel size={2}>
             <Dockable.Tab
