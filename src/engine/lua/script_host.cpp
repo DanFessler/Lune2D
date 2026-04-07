@@ -6,6 +6,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <dirent.h>
 #include <fstream>
@@ -15,6 +16,7 @@
 #include "behavior_schema.hpp"
 #include "engine/constants.hpp"
 #include "engine/engine.hpp"
+#include "engine/texture_cache.hpp"
 #include "lua_api_register.hpp"
 #include "scene.hpp"
 
@@ -118,7 +120,9 @@ static void eng_load_behaviors(lua_State *L, const std::string &behaviorsDir)
         lua_setfield(L, -2, modpath.c_str());
         lua_pop(L, 2); // pop loaded, package
 
-        g_registered_behaviors.push_back(name);
+        if (std::find(g_registered_behaviors.begin(), g_registered_behaviors.end(), name) ==
+            g_registered_behaviors.end())
+            g_registered_behaviors.push_back(name);
         SDL_Log("Loaded behavior: %s", name.c_str());
     }
 
@@ -252,6 +256,7 @@ void eng_reload_behaviors(lua_State *L,
                           const std::string &engineLuaDir,
                           const std::string &projectLuaDir)
 {
+    eng_texture_cache_clear();
     g_registered_behaviors.clear();
     eng_behavior_schema_clear();
     g_scene.releaseAllScriptLuaRefs(L);
@@ -292,6 +297,7 @@ void eng_reload_behaviors(lua_State *L,
     std::string projectDir = projectLuaDir;
     if (!projectDir.empty() && projectDir.back() != '/')
         projectDir += '/';
+    eng_load_behaviors(L, engineDir + "behaviors/");
     eng_load_behaviors(L, projectDir + "behaviors/");
     eng_load_editor_behaviors(L, engineDir + "editor/");
 }
@@ -327,6 +333,7 @@ lua_State *eng_create_lua_vm(const std::string &engineLuaDir, const std::string 
 
     eng_behavior_schema_clear();
     eng_prime_behavior_property_globals(L);
+    eng_load_behaviors(L, engineDir + "behaviors/");
     eng_load_behaviors(L, projectDir + "behaviors/");
     eng_load_editor_behaviors(L, engineDir + "editor/");
 

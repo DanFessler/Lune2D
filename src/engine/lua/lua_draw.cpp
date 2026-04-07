@@ -2,10 +2,12 @@
 #include <lualib.h>
 
 #include <SDL3/SDL.h>
+#include <string>
 #include <vector>
 
 #include "engine/engine.hpp"
 #include "engine/immediate_draw.hpp"
+#include "engine/texture_cache.hpp"
 #include "lua_util.hpp"
 
 static int l_draw_clear(lua_State* L) {
@@ -86,6 +88,46 @@ static int l_draw_number(lua_State* L) {
     return 0;
 }
 
+static int l_draw_sprite(lua_State* L) {
+    const char* pathC = luaL_checkstring(L, 1);
+    float       x     = (float)luaL_checknumber(L, 2);
+    float       y     = (float)luaL_checknumber(L, 3);
+    float       w     = (float)luaL_checknumber(L, 4);
+    float       h     = (float)luaL_checknumber(L, 5);
+    Uint8       tr    = (Uint8)luaL_optinteger(L, 6, 255);
+    Uint8       tg    = (Uint8)luaL_optinteger(L, 7, 255);
+    Uint8       tb    = (Uint8)luaL_optinteger(L, 8, 255);
+    Uint8       ta    = (Uint8)luaL_optinteger(L, 9, 255);
+
+    if (w <= 0.f || h <= 0.f)
+        return 0;
+
+    SDL_Texture* tex = eng_texture_get(g_eng.renderer, std::string(pathC));
+    if (!tex)
+        return 0;
+
+    const Affine2D& m   = eng_draw_current_matrix();
+    Vec2            o   = m.transformPoint(x, y);
+    Vec2            rgt = m.transformPoint(x + w, y);
+    Vec2            dn  = m.transformPoint(x, y + h);
+
+    Uint8 pr = 255, pg = 255, pb = 255, pa = 255;
+    SDL_GetTextureColorMod(tex, &pr, &pg, &pb);
+    SDL_GetTextureAlphaMod(tex, &pa);
+
+    SDL_SetTextureColorMod(tex, tr, tg, tb);
+    SDL_SetTextureAlphaMod(tex, ta);
+
+    SDL_FPoint fo = { o.x, o.y };
+    SDL_FPoint fr = { rgt.x, rgt.y };
+    SDL_FPoint fd = { dn.x, dn.y };
+    SDL_RenderTextureAffine(g_eng.renderer, tex, nullptr, &fo, &fr, &fd);
+
+    SDL_SetTextureColorMod(tex, pr, pg, pb);
+    SDL_SetTextureAlphaMod(tex, pa);
+    return 0;
+}
+
 static int l_draw_present(lua_State* /*L*/) {
     SDL_RenderPresent(g_eng.renderer);
     return 0;
@@ -155,6 +197,8 @@ void eng_lua_register_draw(lua_State* L) {
     lua_setfield(L, -2, "char");
     lua_pushcfunction(L, l_draw_number, "draw.number");
     lua_setfield(L, -2, "number");
+    lua_pushcfunction(L, l_draw_sprite, "draw.sprite");
+    lua_setfield(L, -2, "sprite");
     lua_pushcfunction(L, l_draw_present, "draw.present");
     lua_setfield(L, -2, "present");
     lua_pushcfunction(L, l_draw_pushMatrix, "draw.pushMatrix");

@@ -31,7 +31,15 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 
-FetchContent_MakeAvailable(luau nlohmann_json)
+# Single-header PNG/JPEG decoders (stb_image.h only).
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+
+FetchContent_MakeAvailable(luau nlohmann_json stb)
 
 # ── Executable ────────────────────────────────────────────────────────────────
 
@@ -46,6 +54,7 @@ add_executable(lune2d
     src/engine/engine.cpp
     src/engine/audio_system.cpp
     src/engine/immediate_draw.cpp
+    src/engine/texture_cache.cpp
     src/engine/platform_paths.cpp
     src/engine/lua/lua_draw.cpp
     src/engine/game_keyboard.cpp
@@ -100,6 +109,7 @@ target_include_directories(lune2d PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua
     ${luau_SOURCE_DIR}/VM/include
-    ${luau_SOURCE_DIR}/Compiler/include)
+    ${luau_SOURCE_DIR}/Compiler/include
+    ${stb_SOURCE_DIR})
 
 target_link_libraries(lune2d PRIVATE SDL3::SDL3 Luau.VM Luau.Compiler nlohmann_json::nlohmann_json)

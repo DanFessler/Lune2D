@@ -195,6 +195,7 @@ int main(int argc, char *argv[])
     std::string repoLua = std::string(SDL_GetBasePath()) + "../lua";
     s_engine_lua_dir = repoLua;
     s_project_lua_dir = std::string(SDL_GetBasePath()) + "../default-project";
+    eng_set_project_lua_dir(s_project_lua_dir);
     webview_host_set_lua_workspace(s_project_lua_dir.c_str());
     webview_host_set_lua_engine_workspace(s_engine_lua_dir.c_str());
     s_default_scene_path = s_project_lua_dir + "/scenes/default.scene.json";

@@ -16,6 +16,11 @@ import type {
   EngineEntity,
 } from "../../engineBridge";
 import { engine } from "../../engineProxy";
+import {
+  listProjectDir,
+  readProjectFile,
+  type ProjectDirEntry,
+} from "../../projectFileBridge";
 import { PiBoundingBoxFill } from "react-icons/pi";
 import { FaCode, FaCog, FaTimes } from "react-icons/fa";
 import {
@@ -35,6 +40,18 @@ import {
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import SortableItem from "../components/SortableItem";
 import styles from "./Inspector.module.css";
+
+const IMAGE_PATH_RE = /\.(png|jpe?g|gif|bmp|webp)$/i;
+
+function imageMimeForPath(p: string): string {
+  const l = p.toLowerCase();
+  if (l.endsWith(".png")) return "image/png";
+  if (l.endsWith(".jpg") || l.endsWith(".jpeg")) return "image/jpeg";
+  if (l.endsWith(".gif")) return "image/gif";
+  if (l.endsWith(".webp")) return "image/webp";
+  if (l.endsWith(".bmp")) return "image/bmp";
+  return "image/png";
+}
 
 function parseBehaviorColor(value: unknown): [number, number, number, number] {
   if (!Array.isArray(value) || value.length < 3) return [255, 255, 255, 255];
@@ -588,6 +605,212 @@ function BehaviorEnumRow({
   );
 }
 
+function AssetPickerModal({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (relativePath: string) => void;
+}) {
+  const [segments, setSegments] = useState<string[]>([]);
+  const [entries, setEntries] = useState<ProjectDirEntry[]>([]);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const dir = segments.join("/");
+    setLoadErr(null);
+    void listProjectDir(dir)
+      .then((list) => {
+        if (!cancelled) setEntries(list);
+      })
+      .catch((e) => {
+        if (!cancelled)
+          setLoadErr(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [segments]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className={styles.assetPickerBackdrop}
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className={styles.assetPickerPanel}
+        role="dialog"
+        aria-label="Choose image asset"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className={styles.assetPickerHeader}>
+          <span>Pick image</span>
+          <button type="button" className={styles.assetBrowseBtn} onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className={styles.assetPickerCrumbs}>
+          <button
+            type="button"
+            className={styles.assetPickerCrumb}
+            onClick={() => setSegments([])}
+          >
+            project
+          </button>
+          {segments.map((s, i) => (
+            <span key={`${s}-${i}`}>
+              <span aria-hidden> / </span>
+              <button
+                type="button"
+                className={styles.assetPickerCrumb}
+                onClick={() => setSegments(segments.slice(0, i + 1))}
+              >
+                {s}
+              </button>
+            </span>
+          ))}
+        </div>
+        {loadErr ? <div className={styles.assetPickerErr}>{loadErr}</div> : null}
+        <div className={styles.assetPickerList}>
+          {entries
+            .filter((e) => e.isDirectory || IMAGE_PATH_RE.test(e.name))
+            .map((e) => (
+              <div
+                key={e.path}
+                className={styles.assetPickerRow}
+                onDoubleClick={() => {
+                  if (e.isDirectory) {
+                    setSegments([...segments, e.name]);
+                  } else if (IMAGE_PATH_RE.test(e.name)) {
+                    onPick(e.path);
+                    onClose();
+                  }
+                }}
+              >
+                {e.isDirectory ? "📁" : "🖼"}
+                <span>{e.name}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function BehaviorAssetRow({
+  entityId,
+  behaviorIndex,
+  field,
+  value,
+}: {
+  entityId: number;
+  behaviorIndex: number;
+  field: BehaviorPropertyField;
+  value: unknown;
+}) {
+  const v =
+    typeof value === "string" ? value : value == null ? "" : String(value);
+  const [local, setLocal] = useState(v);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [thumbDataUrl, setThumbDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLocal(
+      typeof value === "string" ? value : value == null ? "" : String(value),
+    );
+  }, [value, field.name]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const p = local.trim();
+    if (!p || !IMAGE_PATH_RE.test(p)) {
+      setThumbDataUrl(null);
+      return;
+    }
+    void readProjectFile(p, { encoding: "base64" })
+      .then((b64) => {
+        if (cancelled || !b64) return;
+        setThumbDataUrl(`data:${imageMimeForPath(p)};base64,${b64}`);
+      })
+      .catch(() => {
+        if (!cancelled) setThumbDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [local]);
+
+  const commit = () => {
+    if (local !== v) {
+      void engine.runtime.setScriptProperty(
+        entityId,
+        behaviorIndex,
+        field.name,
+        local,
+      );
+    }
+  };
+
+  return (
+    <>
+      <span className={styles.fieldLabel} title={field.name}>
+        {field.name}
+      </span>
+      <div className={`${styles.fieldSpan2} ${styles.assetFieldWrap}`}>
+        {thumbDataUrl ? (
+          <img className={styles.assetThumb} src={thumbDataUrl} alt="" />
+        ) : (
+          <div className={styles.assetThumbPlaceholder} aria-hidden />
+        )}
+        <input
+          className={`${styles.fieldInput} ${styles.assetPathInput}`}
+          type="text"
+          value={local}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === "Enter" && commit()}
+          aria-label={field.name}
+        />
+        <button
+          type="button"
+          className={styles.assetBrowseBtn}
+          onClick={() => setPickerOpen(true)}
+        >
+          Browse…
+        </button>
+      </div>
+      {pickerOpen ? (
+        <AssetPickerModal
+          onClose={() => setPickerOpen(false)}
+          onPick={(path) => {
+            setLocal(path);
+            void engine.runtime.setScriptProperty(
+              entityId,
+              behaviorIndex,
+              field.name,
+              path,
+            );
+            setPickerOpen(false);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function BehaviorStringRow({
   entityId,
   behaviorIndex,
@@ -716,8 +939,8 @@ function BehaviorPropertyRow(props: {
     field.enumOptions.length > 0
   )
     return <BehaviorEnumRow {...props} />;
-  if (field.type === "string" || field.type === "asset")
-    return <BehaviorStringRow {...props} />;
+  if (field.type === "asset") return <BehaviorAssetRow {...props} />;
+  if (field.type === "string") return <BehaviorStringRow {...props} />;
   return <BehaviorJsonRow {...props} />;
 }
 

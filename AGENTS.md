@@ -11,7 +11,7 @@ A **general-purpose, small game engine and editor harness**, not “an Asteroids
 
 The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native ↔ web IPC carries script/workspace ops, scene edits, and entity snapshots.
 
-**Asteroids** is the **default example project** under `default-project/` (`game/`, `behaviors/`, `scenes/default.scene.json`, …). **`lua/`** holds **engine-bundled** Luau only (`editor/`, e.g. Transform gizmo)—the layout habit for a future world where the game lives outside the engine tree.
+**Asteroids** is the **default example project** under `default-project/` (`game/`, `behaviors/`, `scenes/default.scene.json`, …). **`lua/`** holds **engine-bundled** Luau: **`lua/editor/`** (editor-only hooks in `_EDITOR_BEHAVIORS`, e.g. Transform gizmo) and **`lua/behaviors/`** (engine-provided game behaviors loaded into `_BEHAVIORS` before the project’s `behaviors/`). A project can **override** an engine behavior by defining a module with the same stem in its own `behaviors/` directory. Native-only slots (e.g. Transform) stay in C++; everything else is Luau in those folders.
 
 ## Goals
 
@@ -26,7 +26,7 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 | Area               | Role                                                                                                                                                     |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/`             | Engine + app glue: SDL loop, `Scene`, Luau runtime APIs, draw/input/audio, **WebKit host** (`webview_host_mac.mm`), scene load/save (`scene_loader.cpp`) |
-| `lua/`             | **Engine Luau** bundled with the repo: `editor/` (strict editor behaviors). Not game content.                                                            |
+| `lua/`             | **Engine Luau**: `behaviors/` (game behaviors for every project), `editor/` (inspector / gizmo overlays). Not the sample game’s content.                  |
 | `default-project/` | **Shipped sample game** (Asteroids): `behaviors/`, `game/`, `scenes/`, `entities.lua`—stand-in for a user project directory outside the engine later.    |
 | `web/`             | React **editor**: dockable layout, hierarchy, inspector, Lua panel, generated bridge helpers                                                             |
 | `scripts/`         | e.g. `gen-scene-ops.mjs` for RPC surface                                                                                                                 |
@@ -45,7 +45,7 @@ The **runtime game** lives in the SDL viewport; **editor UI** is `web/`. Native 
 - **Scope** — Minimal, task-focused diffs; no drive-by refactors or extra markdown unless asked.
 - **Web** — After TS/React changes, `npm test` in `web/` when practical.
 - **Native** — After C++/mm changes, `cmake --build`.
-- **Lua** — `--!strict` for all shipped Luau. `require("editor/…")` resolves under `lua/`; `behaviors/`, `game/`, and root modules like `entities` resolve under the **project** directory (`default-project/` in-tree). Native sets `package.basepath` (project) and `package.enginepath` (`lua/`).
+- **Lua** — `--!strict` for all shipped Luau. `require("editor/…")` resolves under `lua/`; `behaviors/`, `game/`, and root modules like `entities` resolve under the **project** directory (`default-project/` in-tree). Native sets `package.basepath` (project) and `package.enginepath` (`lua/`). Engine game behaviors under `lua/behaviors/` load into `_BEHAVIORS` before the project’s `behaviors/` (override by name).
 
 ## Hard bugs and incident reports
 

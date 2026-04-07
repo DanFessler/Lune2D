@@ -1,6 +1,24 @@
 {
   "entities": [
     {
+      "behaviors": [
+        {
+          "isNative": true,
+          "name": "Transform",
+          "properties": {
+            "angle": 0.0,
+            "sx": 1.0,
+            "sy": 1.0,
+            "vx": 0.0,
+            "vy": 0.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "name": "GameDirector"
+        }
+      ],
       "drawOrder": -1000,
       "id": 1,
       "name": "GameDirector",
@@ -19,11 +37,41 @@
       "updateOrder": 100
     },
     {
+      "behaviors": [
+        {
+          "isNative": true,
+          "name": "Transform",
+          "properties": {
+            "angle": 270.0,
+            "sx": 1.0,
+            "sy": 1.0,
+            "vx": 0.0,
+            "vy": 0.0,
+            "x": 343.5,
+            "y": 245.5
+          }
+        },
+        {
+          "name": "Ship"
+        },
+        {
+          "name": "Sprite",
+          "properties": {
+            "image": "assets/ships_human.png"
+          }
+        }
+      ],
       "drawOrder": 2,
       "id": 2,
       "name": "Player",
       "scripts": [
-        "Ship"
+        "Ship",
+        {
+          "behavior": "Sprite",
+          "properties": {
+            "image": "assets/ships_human.png"
+          }
+        }
       ],
       "transform": {
         "angle": 270.0,
@@ -31,12 +79,30 @@
         "sy": 1.0,
         "vx": 0.0,
         "vy": 0.0,
-        "x": 245.5,
-        "y": 183.0
+        "x": 343.5,
+        "y": 245.5
       },
       "updateOrder": 0
     },
     {
+      "behaviors": [
+        {
+          "isNative": true,
+          "name": "Transform",
+          "properties": {
+            "angle": 0.0,
+            "sx": 1.0,
+            "sy": 1.0,
+            "vx": 0.0,
+            "vy": 0.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "name": "VFX"
+        }
+      ],
       "drawOrder": 500,
       "id": 3,
       "name": "VFX",
@@ -55,6 +121,24 @@
       "updateOrder": 50
     },
     {
+      "behaviors": [
+        {
+          "isNative": true,
+          "name": "Transform",
+          "properties": {
+            "angle": 0.0,
+            "sx": 1.0,
+            "sy": 1.0,
+            "vx": 0.0,
+            "vy": 0.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "name": "HUD"
+        }
+      ],
       "drawOrder": 999,
       "id": 4,
       "name": "HUD",
@@ -73,6 +157,24 @@
       "updateOrder": 999
     },
     {
+      "behaviors": [
+        {
+          "isNative": true,
+          "name": "Transform",
+          "properties": {
+            "angle": 0.0,
+            "sx": 1.0,
+            "sy": 1.0,
+            "vx": 0.0,
+            "vy": 0.0,
+            "x": 30.0,
+            "y": 0.0
+          }
+        },
+        {
+          "name": "NewBehavior"
+        }
+      ],
       "drawOrder": 0,
       "id": 5,
       "name": "Entity",

@@ -30,6 +30,10 @@ extern std::vector<std::string> g_registered_behaviors;
 /// Sorted union of `g_registered_behaviors` and native attachable names (e.g. Transform) for editor UI.
 std::vector<std::string> eng_editor_behavior_dropdown_names();
 
+/// Absolute project root (`behaviors/`, `game/`, assets, …). Set once at startup from main.
+void                 eng_set_project_lua_dir(std::string path);
+const std::string&   eng_project_lua_dir();
+
 inline void eng_init_default_screen_extent() {
     s_game_lu_w = SCREEN_W;
     s_game_lu_h = SCREEN_H;

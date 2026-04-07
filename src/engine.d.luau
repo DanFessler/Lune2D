@@ -32,6 +32,7 @@ declare draw: {
 	poly: (verts: Polygon, x: number, y: number, angle: number, r: number, g: number, b: number, a: number) -> (),
 	char: (c: string, x: number, y: number, scale: number, r: number, g: number, b: number, a: number) -> (),
 	number: (n: number, x: number, y: number, scale: number, r: number, g: number, b: number, a: number) -> (),
+	sprite: (path: string, x: number, y: number, width: number, height: number, r: number?, g: number?, b: number?, a: number?) -> (),
 	present: () -> (),
 	pushMatrix: () -> (),
 	popMatrix: () -> (),
