@@ -12,6 +12,7 @@
 #include "webview_host.hpp"
 #include "editor_state.hpp"
 #include "engine/engine.hpp"
+#include "engine/game_keyboard.hpp"
 #include "engine/lua/lua_runtime.hpp"
 #include "engine/scene_loader.hpp"
 
@@ -982,6 +983,7 @@ bool webview_host_toggle_visibility() {
             s_game_passthrough_rect = NSZeroRect;
             s_web_drag_active = NO;
             SDL_ResetKeyboard();
+            eng_game_keyboard_clear();
             s_was_overlay_keyboard_focus = false;
         }
         return s_webview_visible;
@@ -1253,8 +1255,10 @@ void webview_host_sync_sdl_keyboard_state(void) {
     if (!s_webView || !s_nsWindow)
         return;
     BOOL now = webview_overlay_has_keyboard_focus();
-    if (now && !s_was_overlay_keyboard_focus)
+    if (now && !s_was_overlay_keyboard_focus) {
         SDL_ResetKeyboard();
+        eng_game_keyboard_clear();
+    }
     s_was_overlay_keyboard_focus = now;
 }
 

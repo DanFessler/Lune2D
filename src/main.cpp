@@ -13,6 +13,7 @@
 #include "engine/lua/lua_editor_input.hpp"
 #include "engine/constants.hpp"
 #include "engine/engine.hpp"
+#include "engine/game_keyboard.hpp"
 #include "engine/lua/lua_runtime.hpp"
 #include "engine/lua/lua_vm_lifecycle.hpp"
 #include "engine/lua/script_host.hpp"
@@ -188,6 +189,7 @@ int main(int argc, char *argv[])
     }
     SDL_SetRenderVSync(g_eng.renderer, 1);
     g_eng.audio.init();
+    eng_game_keyboard_init(&g_eng);
 
     webview_host_set_game_rect_callback(on_web_game_rect, nullptr);
     std::string repoLua = std::string(SDL_GetBasePath()) + "../lua";
@@ -247,6 +249,7 @@ int main(int argc, char *argv[])
             {
                 // Key-ups can be delivered elsewhere (another app, or WKWebView); avoid stuck keys.
                 SDL_ResetKeyboard();
+                eng_game_keyboard_clear();
             }
             else if (ev.type == SDL_EVENT_WINDOW_RESIZED)
             {
@@ -279,75 +282,80 @@ int main(int argc, char *argv[])
                         eng_editor_input_button_event(1, false);
                 }
             }
-            else if (ev.type == SDL_EVENT_KEY_DOWN)
+            else if (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP)
             {
-                if (!ev.key.repeat && ev.key.key == SDLK_TAB)
+                eng_game_keyboard_handle_event(ev);
+
+                if (ev.type == SDL_EVENT_KEY_DOWN)
                 {
-                    bool uiVisible = webview_host_toggle_visibility();
-                    if (!uiVisible)
+                    if (!ev.key.repeat && ev.key.key == SDLK_TAB)
                     {
-                        // Hidden overlay should not constrain the game viewport to stale DOM rects.
-                        s_ui_game_x = 0;
-                        s_ui_game_y = 0;
-                        s_ui_game_w = 0;
-                        s_ui_game_h = 0;
-                        s_ui_space_w = 0;
-                        s_ui_space_h = 0;
+                        bool uiVisible = webview_host_toggle_visibility();
+                        if (!uiVisible)
+                        {
+                            // Hidden overlay should not constrain the game viewport to stale DOM rects.
+                            s_ui_game_x = 0;
+                            s_ui_game_y = 0;
+                            s_ui_game_w = 0;
+                            s_ui_game_h = 0;
+                            s_ui_space_w = 0;
+                            s_ui_space_h = 0;
+                        }
+                        continue;
                     }
-                    continue;
-                }
-                const char *keyName = nullptr;
-                switch (ev.key.key)
-                {
-                case SDLK_LEFT:
-                    keyName = "left";
-                    break;
-                case SDLK_RIGHT:
-                    keyName = "right";
-                    break;
-                case SDLK_UP:
-                    keyName = "up";
-                    break;
-                case SDLK_DOWN:
-                    keyName = "down";
-                    break;
-                case SDLK_SPACE:
-                    keyName = "space";
-                    break;
-                case SDLK_A:
-                    keyName = "a";
-                    break;
-                case SDLK_D:
-                    keyName = "d";
-                    break;
-                case SDLK_W:
-                    keyName = "w";
-                    break;
-                case SDLK_R:
-                    keyName = "r";
-                    break;
-                case SDLK_ESCAPE:
-                    keyName = "escape";
-                    break;
-                default:
-                    break;
-                }
-                if (keyName)
-                {
-                    if (std::strcmp(keyName, "escape") == 0)
+                    const char *keyName = nullptr;
+                    switch (ev.key.key)
                     {
-                        g_eng.quit = true;
+                    case SDLK_LEFT:
+                        keyName = "left";
+                        break;
+                    case SDLK_RIGHT:
+                        keyName = "right";
+                        break;
+                    case SDLK_UP:
+                        keyName = "up";
+                        break;
+                    case SDLK_DOWN:
+                        keyName = "down";
+                        break;
+                    case SDLK_SPACE:
+                        keyName = "space";
+                        break;
+                    case SDLK_A:
+                        keyName = "a";
+                        break;
+                    case SDLK_D:
+                        keyName = "d";
+                        break;
+                    case SDLK_W:
+                        keyName = "w";
+                        break;
+                    case SDLK_R:
+                        keyName = "r";
+                        break;
+                    case SDLK_ESCAPE:
+                        keyName = "escape";
+                        break;
+                    default:
+                        break;
                     }
-                    else
+                    if (keyName)
                     {
-                        eng_scene_keydown_lua_scripts(L, g_scene, keyName);
+                        if (std::strcmp(keyName, "escape") == 0)
+                        {
+                            g_eng.quit = true;
+                        }
+                        else
+                        {
+                            eng_scene_keydown_lua_scripts(L, g_scene, keyName);
+                        }
                     }
                 }
             }
         }
 
         webview_host_sync_sdl_keyboard_state();
-        g_eng.keys = SDL_GetKeyboardState(nullptr);
+        eng_game_keyboard_sync();
 
         if (s_script_reload_requested.exchange(false, std::memory_order_acq_rel))
         {

@@ -48,6 +48,7 @@ add_executable(lune2d
     src/engine/immediate_draw.cpp
     src/engine/platform_paths.cpp
     src/engine/lua/lua_draw.cpp
+    src/engine/game_keyboard.cpp
     src/engine/lua/lua_input.cpp
     src/engine/lua/lua_audio.cpp
     src/engine/lua/lua_app.cpp
@@ -90,7 +91,7 @@ if(APPLE)
     set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
     target_sources(lune2d PRIVATE src/webview_host_mac.mm)
     target_link_libraries(lune2d PRIVATE "-framework WebKit" "-framework Cocoa"
-        "-framework UniformTypeIdentifiers")
+        "-framework CoreGraphics" "-framework UniformTypeIdentifiers")
 else()
     target_sources(lune2d PRIVATE src/webview_host_stub.cpp)
 endif()
