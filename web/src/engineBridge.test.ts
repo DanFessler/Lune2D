@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyOptimisticBehaviorReorder,
   applyOptimisticHierarchyDrop,
+  behaviorScriptOrderSignature,
   buildEntityHierarchy,
   compareEntitySiblingOrder,
   getEntityTransform,
@@ -100,6 +102,52 @@ describe("hierarchyLayoutSignature", () => {
       ent("10", { drawOrder: 0 }),
     ];
     expect(hierarchyLayoutSignature(a)).toBe(hierarchyLayoutSignature(b));
+  });
+});
+
+describe("behaviorScriptOrderSignature", () => {
+  it("changes when behavior slots are reordered", () => {
+    const a: EngineEntity = {
+      ...ent("1"),
+      components: [
+        {
+          type: "Behavior",
+          name: "Transform",
+          isNative: true,
+        } as BehaviorComponent,
+        {
+          type: "Behavior",
+          name: "Ship",
+          isNative: false,
+        } as BehaviorComponent,
+      ],
+    };
+    const b: EngineEntity = {
+      ...a,
+      components: [a.components[1], a.components[0]],
+    };
+    expect(behaviorScriptOrderSignature(a)).not.toBe(
+      behaviorScriptOrderSignature(b),
+    );
+  });
+});
+
+describe("applyOptimisticBehaviorReorder", () => {
+  it("moves a component index like native erase+insert", () => {
+    const e: EngineEntity = {
+      ...ent("1"),
+      components: [
+        { type: "Behavior", name: "A", isNative: true } as BehaviorComponent,
+        { type: "Behavior", name: "B", isNative: false } as BehaviorComponent,
+        { type: "Behavior", name: "C", isNative: false } as BehaviorComponent,
+      ],
+    };
+    const next = applyOptimisticBehaviorReorder(e, 0, 2)!;
+    expect(next.components.map((c) => (c as BehaviorComponent).name)).toEqual([
+      "B",
+      "C",
+      "A",
+    ]);
   });
 });
 

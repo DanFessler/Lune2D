@@ -7,13 +7,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { RgbaColorPicker } from "react-colorful";
 import type { RgbaColor } from "react-colorful";
-import type {
-  BehaviorComponent,
-  BehaviorPropertyField,
-  EngineEntity,
+import {
+  applyOptimisticBehaviorReorder,
+  behaviorScriptOrderSignature,
+  type BehaviorComponent,
+  type BehaviorPropertyField,
+  type EngineEntity,
 } from "../../engineBridge";
 import { engine } from "../../engineProxy";
 import {
@@ -42,6 +44,33 @@ import SortableItem from "../components/SortableItem";
 import styles from "./Inspector.module.css";
 
 const IMAGE_PATH_RE = /\.(png|jpe?g|gif|bmp|webp)$/i;
+
+/**
+ * Stable @dnd-kit id per behavior: slot in the last committed `entity.components`, not row index.
+ * Optimistic reorder only permutes the same object refs; `indexOf` resolves the slot until the
+ * next snapshot. Position-based ids (`behavior-0`…) swap which component backs each sortable
+ * during flushSync and break drop animation (duplicate visuals).
+ */
+function behaviorSortableId(
+  committed: EngineEntity,
+  comp: BehaviorComponent,
+): string {
+  const slot = committed.components.indexOf(comp);
+  if (slot < 0) {
+    return `${committed.id}-b-x-${comp.name}-${comp.isNative}`;
+  }
+  return `${committed.id}-b-${slot}`;
+}
+
+function behaviorFoldKey(
+  committed: EngineEntity,
+  comp: BehaviorComponent,
+): string {
+  const slot = committed.components.indexOf(comp);
+  return slot >= 0
+    ? `behavior:${slot}:${comp.name}`
+    : `behavior:?:${comp.name}`;
+}
 
 function imageMimeForPath(p: string): string {
   const l = p.toLowerCase();
@@ -136,7 +165,9 @@ function CollapsibleBlock({
       className={styles.behaviorContainer}
       style={{ boxShadow: "0 -1px 0 rgba(0, 0, 0, 0.1)" }}
       data-behavior-kind={behaviorKind}
-      data-has-editor-pair={hasEditorPair != null ? String(hasEditorPair) : undefined}
+      data-has-editor-pair={
+        hasEditorPair != null ? String(hasEditorPair) : undefined
+      }
     >
       <div
         ref={sortableActivatorRef ?? undefined}
@@ -156,10 +187,14 @@ function CollapsibleBlock({
         {icon}
         <div>{name}</div>
         {behaviorKind === "engine" ? (
-          <span className={styles.engineBadge} title="Engine behavior">E</span>
+          <span className={styles.engineBadge} title="Engine behavior">
+            E
+          </span>
         ) : null}
         {hasEditorPair ? (
-          <span className={styles.editorPairBadge} title="Has editor behavior">✎</span>
+          <span className={styles.editorPairBadge} title="Has editor behavior">
+            ✎
+          </span>
         ) : null}
         <div className={styles.spacer} />
         {onRemove ? (
@@ -601,8 +636,7 @@ function AssetPickerModal({
         if (!cancelled) setEntries(list);
       })
       .catch((e) => {
-        if (!cancelled)
-          setLoadErr(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setLoadErr(e instanceof Error ? e.message : String(e));
       });
     return () => {
       cancelled = true;
@@ -633,7 +667,11 @@ function AssetPickerModal({
       >
         <div className={styles.assetPickerHeader}>
           <span>Pick image</span>
-          <button type="button" className={styles.assetBrowseBtn} onClick={onClose}>
+          <button
+            type="button"
+            className={styles.assetBrowseBtn}
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
@@ -658,7 +696,9 @@ function AssetPickerModal({
             </span>
           ))}
         </div>
-        {loadErr ? <div className={styles.assetPickerErr}>{loadErr}</div> : null}
+        {loadErr ? (
+          <div className={styles.assetPickerErr}>{loadErr}</div>
+        ) : null}
         <div className={styles.assetPickerList}>
           {entries
             .filter((e) => e.isDirectory || IMAGE_PATH_RE.test(e.name))
@@ -872,13 +912,7 @@ function BehaviorJsonRow({
 function BehaviorPropertyRow({ spec }: { spec: InspectorFieldSpec }) {
   const { label, field, value, onCommit } = spec;
   if (field.type === "boolean")
-    return (
-      <BehaviorBoolRow
-        label={label}
-        value={value}
-        onCommit={onCommit}
-      />
-    );
+    return <BehaviorBoolRow label={label} value={value} onCommit={onCommit} />;
   if (field.type === "number" || field.type === "integer")
     return (
       <BehaviorNumberRow
@@ -889,7 +923,9 @@ function BehaviorPropertyRow({ spec }: { spec: InspectorFieldSpec }) {
       />
     );
   if (field.type === "vector")
-    return <BehaviorVectorRow label={label} value={value} onCommit={onCommit} />;
+    return (
+      <BehaviorVectorRow label={label} value={value} onCommit={onCommit} />
+    );
   if (field.type === "color")
     return (
       <BehaviorColorRow
@@ -969,10 +1005,7 @@ function BehaviorPropertyEditor({
   return (
     <>
       {specs.map((spec) => (
-        <BehaviorPropertyRow
-          key={spec.key}
-          spec={spec}
-        />
+        <BehaviorPropertyRow key={spec.key} spec={spec} />
       ))}
     </>
   );
@@ -989,27 +1022,65 @@ function BehaviorList({
 }) {
   const entityId = Number(entity.id);
   const [activeChildren, setActiveChildren] = useState<ReactNode | null>(null);
+  const [optimisticEntity, setOptimisticEntity] = useState<EngineEntity | null>(
+    null,
+  );
 
-  const behaviorEntries = entity.components
+  const modelEntity = optimisticEntity ?? entity;
+
+  useEffect(() => {
+    setOptimisticEntity(null);
+  }, [entity.id]);
+
+  useEffect(() => {
+    if (!optimisticEntity) return;
+    if (
+      behaviorScriptOrderSignature(entity) ===
+      behaviorScriptOrderSignature(optimisticEntity)
+    ) {
+      setOptimisticEntity(null);
+    }
+  }, [entity, optimisticEntity]);
+
+  const behaviorEntries = modelEntity.components
     .map((c, i) => ({ comp: c, idx: i }))
-    .filter((x): x is { comp: BehaviorComponent; idx: number } => x.comp.type === "Behavior");
+    .filter(
+      (x): x is { comp: BehaviorComponent; idx: number } =>
+        x.comp.type === "Behavior",
+    );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
   );
 
-  const behaviorIds = behaviorEntries.map((_, i) => `behavior-${i}`);
+  const sortableIds = behaviorEntries.map((e) =>
+    behaviorSortableId(entity, e.comp),
+  );
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over) return;
+    if (!over) {
+      setActiveChildren(null);
+      return;
+    }
     if (active.id !== over.id) {
-      const fromIdx = behaviorIds.indexOf(String(active.id));
-      const toIdx = behaviorIds.indexOf(String(over.id));
+      const fromIdx = sortableIds.indexOf(String(active.id));
+      const toIdx = sortableIds.indexOf(String(over.id));
       if (fromIdx >= 0 && toIdx >= 0) {
         const fromBehIdx = behaviorEntries[fromIdx].idx;
         const toBehIdx = behaviorEntries[toIdx].idx;
-        engine.runtime.reorderScript(entityId, fromBehIdx, toBehIdx);
+        const base = optimisticEntity ?? entity;
+        const optimistic = applyOptimisticBehaviorReorder(
+          base,
+          fromBehIdx,
+          toBehIdx,
+        );
+        if (optimistic) {
+          flushSync(() => {
+            setOptimisticEntity(optimistic);
+          });
+        }
+        void engine.runtime.reorderScript(entityId, fromBehIdx, toBehIdx);
       }
     }
     setActiveChildren(null);
@@ -1028,15 +1099,21 @@ function BehaviorList({
       onDragCancel={() => setActiveChildren(null)}
       modifiers={[restrictToVerticalAxis]}
     >
-      <SortableContext items={behaviorIds} strategy={verticalListSortingStrategy}>
+      <SortableContext
+        items={sortableIds}
+        strategy={verticalListSortingStrategy}
+      >
         {behaviorEntries.map((entry, i) => {
           const comp = entry.comp;
           const behIdx = entry.idx;
           const isEngine = comp.isNative;
-          const key = `behavior:${i}:${comp.name}`;
-          const icon = isEngine
-            ? <PiBoundingBoxFill style={{ width: "14px", height: "14px" }} />
-            : <FaCode style={{ width: "14px", height: "14px" }} />;
+          const sortId = sortableIds[i]!;
+          const foldKey = behaviorFoldKey(entity, comp);
+          const icon = isEngine ? (
+            <PiBoundingBoxFill style={{ width: "14px", height: "14px" }} />
+          ) : (
+            <FaCode style={{ width: "14px", height: "14px" }} />
+          );
 
           const propertyBody =
             comp.propertySchema && comp.propertySchema.length > 0 ? (
@@ -1050,11 +1127,15 @@ function BehaviorList({
                 className={styles.fieldLabel}
                 style={{ gridColumn: "1 / -1" }}
               >
-                {isEngine
-                  ? "Engine behavior"
-                  : <>Luau behavior (add{" "}
-                    <code>properties = defineProperties {"{ ... }"}</code> to expose
-                    fields)</>}
+                {isEngine ? (
+                  "Engine behavior"
+                ) : (
+                  <>
+                    Luau behavior (add{" "}
+                    <code>properties = defineProperties {"{ ... }"}</code> to
+                    expose fields)
+                  </>
+                )}
               </span>
             );
           const dragOverlay = (
@@ -1072,8 +1153,8 @@ function BehaviorList({
           );
           return (
             <SortableItem
-              key={behaviorIds[i]}
-              id={behaviorIds[i]}
+              key={sortId}
+              id={sortId}
               data={{ type: "behavior" }}
               dragOverlay={dragOverlay}
             >
@@ -1083,9 +1164,13 @@ function BehaviorList({
                   icon={icon}
                   canDisable={false}
                   active={true}
-                  isCollapsed={collapseMap[key] ?? false}
-                  onFold={(c) => onFold(key, c)}
-                  onRemove={isEngine ? undefined : () => engine.runtime.removeScript(entityId, behIdx)}
+                  isCollapsed={collapseMap[foldKey] ?? false}
+                  onFold={(c) => onFold(foldKey, c)}
+                  onRemove={
+                    isEngine
+                      ? undefined
+                      : () => engine.runtime.removeScript(entityId, behIdx)
+                  }
                   sortableActivatorRef={handle.setActivatorNodeRef}
                   sortableListeners={handle.listeners}
                   behaviorKind={isEngine ? "engine" : "user"}
@@ -1179,9 +1264,9 @@ export default function EngineInspector({
           onKeyDown={(e) => e.key === "Enter" && commitName()}
         />
       </div>
-      <p className={styles.metaRow}>
+      {/* <p className={styles.metaRow}>
         id {entity.id} · draw {entity.drawOrder} · update {entity.updateOrder}
-      </p>
+      </p> */}
       <div
         style={{
           overflow: "auto",
