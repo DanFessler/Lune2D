@@ -7,12 +7,18 @@
           "name": "Transform",
           "properties": {
             "angle": 0.0,
-            "sx": 1.0,
-            "sy": 1.0,
-            "vx": 0.0,
-            "vy": 0.0,
-            "x": 0.0,
-            "y": 0.0
+            "position": [
+              0.0,
+              0.0
+            ],
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "velocity": [
+              0.0,
+              0.0
+            ]
           }
         },
         {
@@ -42,13 +48,19 @@
           "isNative": true,
           "name": "Transform",
           "properties": {
-            "angle": 270.0,
-            "sx": 1.0,
-            "sy": 1.0,
-            "vx": 0.0,
-            "vy": 0.0,
-            "x": 343.5,
-            "y": 245.5
+            "angle": 0.0,
+            "position": [
+              205.66015625,
+              225.796875
+            ],
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "velocity": [
+              0.0,
+              0.0
+            ]
           }
         },
         {
@@ -74,13 +86,13 @@
         }
       ],
       "transform": {
-        "angle": 270.0,
+        "angle": 0.0,
         "sx": 1.0,
         "sy": 1.0,
         "vx": 0.0,
         "vy": 0.0,
-        "x": 343.5,
-        "y": 245.5
+        "x": 205.66015625,
+        "y": 225.796875
       },
       "updateOrder": 0
     },
@@ -91,12 +103,18 @@
           "name": "Transform",
           "properties": {
             "angle": 0.0,
-            "sx": 1.0,
-            "sy": 1.0,
-            "vx": 0.0,
-            "vy": 0.0,
-            "x": 0.0,
-            "y": 0.0
+            "position": [
+              0.0,
+              0.0
+            ],
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "velocity": [
+              0.0,
+              0.0
+            ]
           }
         },
         {
@@ -127,12 +145,18 @@
           "name": "Transform",
           "properties": {
             "angle": 0.0,
-            "sx": 1.0,
-            "sy": 1.0,
-            "vx": 0.0,
-            "vy": 0.0,
-            "x": 0.0,
-            "y": 0.0
+            "position": [
+              0.0,
+              0.0
+            ],
+            "scale": [
+              1.0,
+              1.0
+            ],
+            "velocity": [
+              0.0,
+              0.0
+            ]
           }
         },
         {
@@ -155,43 +179,6 @@
         "y": 0.0
       },
       "updateOrder": 999
-    },
-    {
-      "behaviors": [
-        {
-          "isNative": true,
-          "name": "Transform",
-          "properties": {
-            "angle": 0.0,
-            "sx": 1.0,
-            "sy": 1.0,
-            "vx": 0.0,
-            "vy": 0.0,
-            "x": 30.0,
-            "y": 0.0
-          }
-        },
-        {
-          "name": "NewBehavior"
-        }
-      ],
-      "drawOrder": 0,
-      "id": 5,
-      "name": "Entity",
-      "parentId": 2,
-      "scripts": [
-        "NewBehavior"
-      ],
-      "transform": {
-        "angle": 0.0,
-        "sx": 1.0,
-        "sy": 1.0,
-        "vx": 0.0,
-        "vy": 0.0,
-        "x": 30.0,
-        "y": 0.0
-      },
-      "updateOrder": 0
     }
   ]
 }

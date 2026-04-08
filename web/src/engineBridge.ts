@@ -206,15 +206,6 @@ export function behaviorScriptOrderSignature(entity: EngineEntity): string {
     .join("\n");
 }
 
-/** Fingerprint of component / behavior slot order for inspector reorder vs next snapshot. */
-export function behaviorScriptOrderSignature(entity: EngineEntity): string {
-  return entity.components
-    .map((c) =>
-      c.type === "Behavior" ? `${c.name}\t${c.isNative}` : c.type,
-    )
-    .join("\n");
-}
-
 /**
  * Local mirror of hierarchy drag logic so the UI can update before the next native snapshot.
  * Keeps @dnd-kit drop animation aligned with ctx-game (draggable node is already at the new row).
@@ -275,6 +266,15 @@ export function applyOptimisticHierarchyDrop(
     const ordered = [...others, activeRow];
     ordered.forEach((e, i) => {
       patch(e.id, (row) => {
+        row.drawOrder = i;
+        row.updateOrder = i;
+      });
+    });
+  }
+
+  return next;
+}
+
 /**
  * Local mirror of native reorderBehavior so inspector sortables finish drop animation
  * on the new order before the next scene snapshot arrives.
@@ -299,15 +299,6 @@ export function applyOptimisticBehaviorReorder(
   const [moved] = nextComponents.splice(fromIndex, 1);
   nextComponents.splice(toIndex, 0, moved);
   return { ...entity, components: nextComponents };
-}
-
-        row.drawOrder = i;
-        row.updateOrder = i;
-      });
-    });
-  }
-
-  return next;
 }
 
 /** True if `childId` appears on the parentId chain walking up from `parentId` (cycle guard). */

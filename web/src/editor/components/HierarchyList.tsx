@@ -1,3 +1,4 @@
+import { Dockable } from "@danfessler/react-dockable";
 import { useState } from "react";
 import type { HierarchyEntity } from "../../engineBridge";
 import { PiBoundingBoxFill } from "react-icons/pi";
@@ -8,6 +9,7 @@ export type HierarchyListProps = {
   entities: HierarchyEntity[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onDeleteEntity?: (id: string) => void | Promise<void>;
   isDragging?: boolean;
   canDrop?: boolean;
 };
@@ -17,6 +19,7 @@ function HierarchyList({
   entities,
   selectedId,
   onSelect,
+  onDeleteEntity,
   isDragging: isDraggingProp = false,
   canDrop = false,
 }: HierarchyListProps) {
@@ -28,6 +31,7 @@ function HierarchyList({
           entity={entity}
           selectedId={selectedId}
           onSelect={onSelect}
+          onDeleteEntity={onDeleteEntity}
           isDragging={isDraggingProp}
           canDrop={canDrop}
         />
@@ -41,12 +45,14 @@ function HierarchySubtree({
   entity,
   selectedId,
   onSelect,
+  onDeleteEntity,
   isDragging: isDraggingProp,
   canDrop,
 }: {
   entity: HierarchyEntity;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onDeleteEntity?: (id: string) => void | Promise<void>;
   isDragging: boolean;
   canDrop: boolean;
 }) {
@@ -59,6 +65,7 @@ function HierarchySubtree({
             entity={entity}
             selectedId={selectedId}
             onSelect={onSelect}
+            onDeleteEntity={onDeleteEntity}
             isDragging={true}
             canDrop={canDrop}
           />
@@ -84,6 +91,7 @@ function HierarchySubtree({
         entity={entity}
         selectedId={selectedId}
         onSelect={onSelect}
+        onDeleteEntity={onDeleteEntity}
         isDragging={isDragging || isDraggingProp}
         canDrop={canDrop}
       />
@@ -98,12 +106,14 @@ function HierarchyItem({
   entity,
   selectedId,
   onSelect,
+  onDeleteEntity,
   isDragging,
   canDrop,
 }: {
   entity: HierarchyEntity;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onDeleteEntity?: (id: string) => void | Promise<void>;
   isDragging: boolean;
   canDrop: boolean;
 }) {
@@ -118,54 +128,79 @@ function HierarchyItem({
     },
   });
 
+  const row = (
+    <div
+      className={`${styles.item} ${
+        selectedId === entity.id || isOver ? styles.selected : ""
+      }`}
+      onClick={() => onSelect(entity.id)}
+    >
+      {hasChildren ? (
+        <div
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setIsOpen(!isOpen);
+            }
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsOpen(!isOpen);
+          }}
+          className={styles.arrow}
+        >
+          {isOpen ? "▼" : "▶"}
+        </div>
+      ) : null}
+      <PiBoundingBoxFill
+        style={{ width: "14px", height: "14px", flexShrink: 0 }}
+      />
+      {entity.name}
+      {!isDragging && canDrop && (
+        <>
+          <DroppableDivider side="top" id={entity.id} />
+          <div
+            ref={setNodeRef}
+            style={{
+              position: "absolute",
+              left: 0,
+              width: "calc(100% - 24px)",
+              height: 4,
+              top: "50%",
+              marginLeft: 24,
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
+
   return (
     <li>
-      <div
-        className={`${styles.item} ${
-          selectedId === entity.id || isOver ? styles.selected : ""
-        }`}
-        onClick={() => onSelect(entity.id)}
-      >
-        {hasChildren ? (
-          <div
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setIsOpen(!isOpen);
-              }
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(!isOpen);
-            }}
-            className={styles.arrow}
-          >
-            {isOpen ? "▼" : "▶"}
-          </div>
-        ) : null}
-        <PiBoundingBoxFill
-          style={{ width: "14px", height: "14px", flexShrink: 0 }}
-        />
-        {entity.name}
-        {!isDragging && canDrop && (
-          <>
-            <DroppableDivider side="top" id={entity.id} />
-            <div
-              ref={setNodeRef}
-              style={{
-                position: "absolute",
-                left: 0,
-                width: "calc(100% - 24px)",
-                height: 4,
-                top: "50%",
-                marginLeft: 24,
-              }}
-            />
-          </>
-        )}
-      </div>
+      {onDeleteEntity ? (
+        <Dockable.Menu
+          id={`hierarchy-ctx-${entity.id}`}
+          mode="context"
+          customItems={[
+            {
+              items: [
+                {
+                  label: "Delete",
+                  onClick: () => {
+                    void onDeleteEntity(entity.id);
+                  },
+                },
+              ],
+            },
+          ]}
+        >
+          {row}
+        </Dockable.Menu>
+      ) : (
+        row
+      )}
       {isOpen && hasChildren ? (
         <div className={styles.children}>
           {entity.children.map((child) => (
@@ -174,6 +209,7 @@ function HierarchyItem({
               entity={child}
               selectedId={selectedId}
               onSelect={onSelect}
+              onDeleteEntity={onDeleteEntity}
               isDragging={isDragging}
               canDrop={true}
             />

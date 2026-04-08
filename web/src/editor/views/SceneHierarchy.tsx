@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { FaSearch } from "react-icons/fa";
 import type { EngineEntity, HierarchyEntity } from "../../engineBridge";
@@ -26,6 +26,26 @@ export type SceneHierarchyProps = {
   selectedId: string | null;
   onSelect: (id: string) => void;
 };
+
+function findHierarchyNode(
+  nodes: HierarchyEntity[],
+  id: string,
+): HierarchyEntity | null {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const found = findHierarchyNode(n.children, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Destroys children before parent so we do not leave dangling `parentId` references. */
+function collectPostOrderEntityIds(node: HierarchyEntity): string[] {
+  const out: string[] = [];
+  for (const c of node.children) out.push(...collectPostOrderEntityIds(c));
+  out.push(node.id);
+  return out;
+}
 
 function filterHierarchy(
   nodes: HierarchyEntity[],
@@ -85,6 +105,21 @@ export default function SceneHierarchy({
     useSensor(PointerSensor, {
       activationConstraint: { distance: 10 },
     }),
+  );
+
+  const deleteEntitySubtree = useCallback(
+    async (rootId: string) => {
+      const node = findHierarchyNode(tree, rootId);
+      if (!node) return;
+      for (const id of collectPostOrderEntityIds(node)) {
+        try {
+          await engine.runtime.destroy(Number(id));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    },
+    [tree],
   );
 
   function handleDragEnd(event: DragEndEvent) {
@@ -180,6 +215,7 @@ export default function SceneHierarchy({
             entities={filteredTree}
             selectedId={selectedId}
             onSelect={onSelect}
+            onDeleteEntity={deleteEntitySubtree}
             canDrop={true}
           />
         </div>
