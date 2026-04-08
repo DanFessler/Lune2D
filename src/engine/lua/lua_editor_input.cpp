@@ -33,11 +33,21 @@ void eng_editor_input_button_event(int button, bool down)
         s_state.buttonsHeld &= ~mask;
 }
 
-void eng_editor_input_end_frame()
+void eng_editor_input_scroll_event(float dy)
+{
+    s_state.scrollDelta += dy;
+}
+
+void eng_editor_input_sync_frame_edges()
 {
     s_state.buttonsPressed = s_state.buttonsHeld & ~s_prev_held;
     s_state.buttonsReleased = ~s_state.buttonsHeld & s_prev_held;
+}
+
+void eng_editor_input_end_frame()
+{
     s_prev_held = s_state.buttonsHeld;
+    s_state.scrollDelta = 0;
 }
 
 EditorInputState eng_editor_input_state()
@@ -96,6 +106,14 @@ static int l_editorInput_mouseReleased(lua_State *L)
     return 1;
 }
 
+static int l_editorInput_scrollDelta(lua_State *L)
+{
+    float d = s_state.scrollDelta;
+    s_state.scrollDelta = 0;
+    lua_pushnumber(L, d);
+    return 1;
+}
+
 void eng_lua_register_editor_input(lua_State *L)
 {
     lua_newtable(L);
@@ -107,6 +125,8 @@ void eng_lua_register_editor_input(lua_State *L)
     lua_setfield(L, -2, "mousePressed");
     lua_pushcfunction(L, l_editorInput_mouseReleased, "editorInput.mouseReleased");
     lua_setfield(L, -2, "mouseReleased");
+    lua_pushcfunction(L, l_editorInput_scrollDelta, "editorInput.scrollDelta");
+    lua_setfield(L, -2, "scrollDelta");
     lua_setglobal(L, "editorInput");
 }
 

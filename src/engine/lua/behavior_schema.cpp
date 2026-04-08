@@ -14,6 +14,24 @@ void eng_behavior_schema_clear() {
     g_behaviorSchemas.clear();
 }
 
+void eng_behavior_schema_register_test_camera_stub()
+{
+    BehaviorSchema cam;
+    BehaviorPropField vfov;
+    vfov.name = "vfov";
+    vfov.type = "number";
+    vfov.defaultValue = 0.0;
+    cam.order.push_back(vfov);
+
+    BehaviorPropField bg;
+    bg.name = "backgroundColor";
+    bg.type = "color";
+    bg.defaultValue = nlohmann::json::array({0, 0, 0, 255});
+    cam.order.push_back(bg);
+
+    g_behaviorSchemas["Camera"] = std::move(cam);
+}
+
 void eng_behavior_schema_register_builtin_natives() {
     BehaviorSchema transform;
     BehaviorPropField position;

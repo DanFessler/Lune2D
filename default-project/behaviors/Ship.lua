@@ -48,8 +48,8 @@ return {
 			lives = self.lives,
 		}
 		local t = runtime.getTransform(id)
-		t.x = screen.w / 2
-		t.y = screen.h / 2
+		t.x = 0
+		t.y = 0
 	end,
 	update = function(self, dt: number)
 		local entityId = self.entityId
@@ -66,7 +66,7 @@ return {
 			ship.respawnDelayTimer -= dt
 			if ship.respawnDelayTimer <= 0 then
 				ship.respawnDelayTimer = 0
-				t.x, t.y = screen.w / 2, screen.h / 2
+				t.x, t.y = 0, 0
 				t.vx, t.vy = 0, 0
 				t.angle = 270
 				ship.respawnTimer = C.SHIP_POST_RESPAWN_INVULN

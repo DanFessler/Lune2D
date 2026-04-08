@@ -44,6 +44,19 @@ struct Affine2D
                 c * px + d * py + ty};
     }
 
+    static Affine2D fromScale(float sx, float sy)
+    {
+        return {sx, 0, 0, 0, sy, 0};
+    }
+
+    Affine2D inverse() const
+    {
+        float det = a * d - b * c;
+        float invDet = 1.f / det;
+        return {d * invDet, -b * invDet, (b * ty - d * tx) * invDet,
+                -c * invDet, a * invDet, (c * tx - a * ty) * invDet};
+    }
+
     float uniformScale() const
     {
         return sqrtf(a * a + c * c);

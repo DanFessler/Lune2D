@@ -207,8 +207,4 @@ return {
 			end
 		end
 	end,
-	draw = function(_self, _t: number)
-		-- SDL/chrome clear matches the editor shell; clear playfield so space reads black.
-		draw.clear(0, 0, 0)
-	end,
 }

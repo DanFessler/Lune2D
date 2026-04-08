@@ -9,6 +9,9 @@ class Scene;
 extern lua_State *g_eng_lua_vm;
 void eng_lua_bind_main_vm(lua_State *L);
 
+/// When true, `eng_scene_draw_editor_overlays` is a no-op (pixel-probe / headless visual harness).
+void eng_set_visual_test_skip_editor_overlays(bool skip);
+
 bool eng_scene_mut_set_script_property(lua_State *L, uint32_t entityId, int scriptIndex,
                                        const char *key, bool erase, const nlohmann::json &value);
 

@@ -69,10 +69,20 @@ local function spawnWave(count: number): { Asteroid }
         local edge = math.random(4)
         local x: number, y: number
         local W, H = screen.w, screen.h
-        if     edge == 1 then x = randf(0,W); y = -AST_LARGE_R
-        elseif edge == 2 then x = randf(0,W); y = H + AST_LARGE_R
-        elseif edge == 3 then x = -AST_LARGE_R; y = randf(0,H)
-        else                   x = W + AST_LARGE_R; y = randf(0,H) end
+        local hw, hh = W / 2, H / 2
+        if edge == 1 then
+            x = randf(-hw, hw)
+            y = -hh - AST_LARGE_R
+        elseif edge == 2 then
+            x = randf(-hw, hw)
+            y = hh + AST_LARGE_R
+        elseif edge == 3 then
+            x = -hw - AST_LARGE_R
+            y = randf(-hh, hh)
+        else
+            x = hw + AST_LARGE_R
+            y = randf(-hh, hh)
+        end
         wave[#wave+1] = makeAsteroid(x, y, "large")
     end
     return wave

@@ -34,6 +34,9 @@ struct BehaviorSchema {
 
 void eng_behavior_schema_clear();
 
+/// Registers a minimal `Camera` schema for native/unit tests (matches `lua/behaviors/Camera.lua`).
+void eng_behavior_schema_register_test_camera_stub();
+
 /// Registers built-in native behavior schemas (e.g. Transform) into the shared registry.
 void eng_behavior_schema_register_builtin_natives();
 

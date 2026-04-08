@@ -51,6 +51,8 @@ add_executable(lune2d
     src/editor_bridge.cpp
     src/webview_viewport.cpp
     src/viewport_math.cpp
+    src/engine/camera.cpp
+    src/engine/camera_view_matrix.cpp
     src/engine/engine.cpp
     src/engine/audio_system.cpp
     src/engine/immediate_draw.cpp
@@ -101,6 +103,38 @@ target_include_directories(editor_input_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua)
 add_test(NAME editor_input COMMAND editor_input_tests)
+
+add_executable(affine2d_tests tests/affine2d_test.cpp)
+target_include_directories(affine2d_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME affine2d COMMAND affine2d_tests)
+
+add_executable(camera_math_tests tests/camera_math_test.cpp src/engine/camera_view_matrix.cpp)
+target_include_directories(camera_math_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME camera_math COMMAND camera_math_tests)
+
+add_executable(camera_sync_tests
+    tests/camera_sync_test.cpp
+    src/engine/camera.cpp
+    src/engine/camera_view_matrix.cpp
+    src/engine/engine.cpp
+    src/editor_state.cpp
+    src/scene.cpp
+    src/engine/lua/behavior_schema.cpp)
+target_include_directories(camera_sync_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua
+    ${luau_SOURCE_DIR}/VM/include)
+target_link_libraries(camera_sync_tests PRIVATE
+    SDL3::SDL3
+    Luau.VM
+    nlohmann_json::nlohmann_json)
+add_test(NAME camera_sync COMMAND camera_sync_tests)
+
+add_test(NAME visual_camera COMMAND $<TARGET_FILE:lune2d>
+    --project ${CMAKE_SOURCE_DIR}/test-project
+    --run-visual-tests
+    --visual-test-after-frames 30)
+set_tests_properties(visual_camera PROPERTIES LABELS "visual;sdl")
 
 if(APPLE)
     enable_language(OBJCXX)

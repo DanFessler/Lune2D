@@ -10,6 +10,7 @@
 
 #include "editor_bridge.hpp"
 #include "editor_state.hpp"
+#include "engine/camera.hpp"
 #include "engine/lua/lua_editor_input.hpp"
 #include "engine/constants.hpp"
 #include "engine/engine.hpp"
@@ -37,6 +38,7 @@ static lua_State *s_lua_for_behaviors_reload = nullptr;
 static void on_script_reload_request()
 {
     eng_editor_set_sim_ui_state(EngSimUiState::Stopped);
+    eng_camera_state().activeCameraEntityId = 0;
     s_script_reload_requested.store(true, std::memory_order_relaxed);
 }
 
@@ -72,6 +74,9 @@ static void on_web_game_rect(int x, int y, int w, int h, int ui_space_w, int ui_
 static int s_capture_after_frames = -1;
 static const char *s_capture_path = nullptr;
 static bool s_native_game_rect_pct = false;
+static std::string s_cli_project_dir;
+static bool s_run_visual_tests = false;
+static int s_visual_test_after_frames = 90;
 
 
 static bool main_layout_dimensions(int *layout_w, int *layout_h)
@@ -116,9 +121,43 @@ static void parse_cli(int argc, char **argv)
         {
             s_native_game_rect_pct = true;
         }
+        else if (std::strcmp(argv[i], "--project") == 0 && i + 1 < argc)
+        {
+            s_cli_project_dir = argv[++i];
+        }
+        else if (std::strcmp(argv[i], "--run-visual-tests") == 0)
+        {
+            s_run_visual_tests = true;
+        }
+        else if (std::strcmp(argv[i], "--visual-test-after-frames") == 0 && i + 1 < argc)
+        {
+            s_visual_test_after_frames = std::atoi(argv[++i]);
+        }
     }
     if (s_capture_path && s_capture_after_frames < 0)
         s_capture_after_frames = 180;
+    if (s_run_visual_tests && s_visual_test_after_frames < 1)
+        s_visual_test_after_frames = 90;
+}
+
+static bool eng_run_visual_tests_lua(lua_State *L)
+{
+    lua_getglobal(L, "_runVisualTests");
+    if (!lua_isfunction(L, -1))
+    {
+        SDL_Log("visual tests: _runVisualTests is not a function");
+        lua_pop(L, 1);
+        return false;
+    }
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK)
+    {
+        SDL_Log("visual tests: %s", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return false;
+    }
+    bool ok = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    return ok;
 }
 
 static std::string s_engine_lua_dir;
@@ -171,6 +210,7 @@ static lua_State *create_vm_and_load_scene()
 int main(int argc, char *argv[])
 {
     parse_cli(argc, argv);
+    eng_set_visual_test_skip_editor_overlays(s_run_visual_tests);
     srand(static_cast<unsigned>(time(nullptr)));
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
@@ -194,7 +234,14 @@ int main(int argc, char *argv[])
     webview_host_set_game_rect_callback(on_web_game_rect, nullptr);
     std::string repoLua = std::string(SDL_GetBasePath()) + "../lua";
     s_engine_lua_dir = repoLua;
-    s_project_lua_dir = std::string(SDL_GetBasePath()) + "../default-project";
+    if (!s_cli_project_dir.empty())
+    {
+        s_project_lua_dir = s_cli_project_dir;
+        if (!s_project_lua_dir.empty() && s_project_lua_dir.back() != '/')
+            s_project_lua_dir += '/';
+    }
+    else
+        s_project_lua_dir = std::string(SDL_GetBasePath()) + "../default-project";
     eng_set_project_lua_dir(s_project_lua_dir);
     webview_host_set_lua_workspace(s_project_lua_dir.c_str());
     webview_host_set_lua_engine_workspace(s_engine_lua_dir.c_str());
@@ -220,6 +267,31 @@ int main(int argc, char *argv[])
     }
 
     eng_lua_bind_main_vm(L);
+
+    if (s_run_visual_tests)
+    {
+        lua_getglobal(L, "require");
+        lua_pushstring(L, "game/visual_tests");
+        if (lua_pcall(L, 1, 1, 0) != LUA_OK)
+        {
+            SDL_Log("visual tests: require(game/visual_tests) failed: %s", lua_tostring(L, -1));
+            lua_close(L);
+            SDL_Quit();
+            return 1;
+        }
+        lua_getfield(L, -1, "run");
+        if (!lua_isfunction(L, -1))
+        {
+            SDL_Log("visual tests: game/visual_tests must return table with run()");
+            lua_close(L);
+            SDL_Quit();
+            return 1;
+        }
+        lua_setglobal(L, "_runVisualTests");
+        lua_pop(L, 1);
+        // Frame clear uses play camera color only while Playing/Paused; drive the harness as play mode.
+        eng_editor_set_sim_ui_state(EngSimUiState::Playing);
+    }
 
     s_lua_for_behaviors_reload = L;
     webview_host_set_behaviors_reload_fn(reload_behaviors_from_web_ui);
@@ -273,15 +345,22 @@ int main(int argc, char *argv[])
                     if (in_game)
                         eng_editor_input_set_mouse(lx, ly);
 
-                    if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT)
-                        eng_editor_input_button_event(0, true);
-                    else if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_RIGHT)
-                        eng_editor_input_button_event(1, true);
-                    else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT)
-                        eng_editor_input_button_event(0, false);
-                    else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_RIGHT)
-                        eng_editor_input_button_event(1, false);
+                    if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN || ev.type == SDL_EVENT_MOUSE_BUTTON_UP)
+                    {
+                        bool down = (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
+                        if (ev.button.button == SDL_BUTTON_LEFT)
+                            eng_editor_input_button_event(0, down);
+                        else if (ev.button.button == SDL_BUTTON_MIDDLE)
+                            eng_editor_input_button_event(1, down);
+                        else if (ev.button.button == SDL_BUTTON_RIGHT)
+                            eng_editor_input_button_event(2, down);
+                    }
                 }
+            }
+            else if (ev.type == SDL_EVENT_MOUSE_WHEEL)
+            {
+                if (eng_editor_overlays_enabled())
+                    eng_editor_input_scroll_event(ev.wheel.y);
             }
             else if (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP)
             {
@@ -419,14 +498,42 @@ int main(int argc, char *argv[])
         {
             eng_scene_update_lua_scripts(L, g_scene, dt);
         }
-        eng_editor_input_end_frame();
+        eng_editor_input_sync_frame_edges();
         eng_scene_update_editor_behaviors(L, g_scene, dt);
+        eng_editor_input_end_frame();
         editor_bridge_publish_scene_snapshot(g_scene);
 
-        // Background: chrome + black game inset are applied in webview_apply_game_viewport
-        // (SDL_RenderClear clears the entire target and would wipe letterboxing to black).
+        {
+            auto &cam = eng_camera_state();
+            const EngSimUiState sim = eng_editor_sim_ui_state();
+            const bool playClear = (sim == EngSimUiState::Playing || sim == EngSimUiState::Paused);
+            uint8_t cr = playClear ? cam.playBgR : cam.editorBgR;
+            uint8_t cg = playClear ? cam.playBgG : cam.editorBgG;
+            uint8_t cb = playClear ? cam.playBgB : cam.editorBgB;
+            SDL_SetRenderDrawColor(g_eng.renderer, cr, cg, cb, 255);
+            SDL_FRect bg = {0, 0, (float)lu_w, (float)lu_h};
+            SDL_RenderFillRect(g_eng.renderer, &bg);
+        }
         eng_scene_draw_lua_scripts(L, g_scene, totalTime);
         eng_scene_draw_editor_overlays(L, g_scene, totalTime);
+
+        if (s_run_visual_tests && frame_idx == s_visual_test_after_frames)
+        {
+            if (!eng_run_visual_tests_lua(L))
+            {
+                SDL_Log("visual tests: FAILED");
+                lua_close(L);
+                g_eng.audio.shutdown();
+                webview_host_shutdown();
+                SDL_DestroyRenderer(g_eng.renderer);
+                SDL_DestroyWindow(g_eng.window);
+                SDL_Quit();
+                return 1;
+            }
+            SDL_Log("visual tests: PASSED");
+            g_eng.quit = true;
+        }
+
         SDL_RenderPresent(g_eng.renderer);
 
 #if defined(__APPLE__)

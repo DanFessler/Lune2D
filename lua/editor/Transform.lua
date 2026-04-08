@@ -1,18 +1,17 @@
 --!strict
 -- Built-in editor behavior for Transform: origin dots, gizmo axes, rotation arc, selection, drag.
 -- Driven by `editorInput` polling API; native no longer owns pick/drag policy.
+-- All picking and drawing operates in world coordinates; screen-pixel constants are divided by
+-- camera scale so gizmos remain constant size on screen regardless of zoom.
 
 local RAD = math.pi / 180
-local HIT_RADIUS = 18
-local GIZMO_AXIS_LEN = 36
--- Luau-space half width for hitting an axis segment (thick pick region).
-local AXIS_HIT = 14
--- Only treat as axis if click projects this far along the arrow (origin dot keeps free XY drag).
+-- Base constants in screen pixels; divided by cameraScale at use sites.
+local HIT_RADIUS_PX = 18
+local GIZMO_AXIS_LEN_PX = 36
+local AXIS_HIT_PX = 14
 local AXIS_T_MIN = 0.22
--- Rotation hint arc: short span centered on local +X/+Y bisector (rad + π/4), not a full quarter turn.
 local GIZMO_ROT_ARC_SPAN = math.pi / 8
--- Pick tolerance: radial distance from gizmo circle; mouse must lie within arc angular span.
-local ROT_ARC_HIT_RADIAL = 10
+local ROT_ARC_HIT_RADIAL_PX = 10
 local ROT_ARC_HIT_ANG = 0.06
 
 local function distPointToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): (number, number)
@@ -46,37 +45,46 @@ local function unwrapAngleRad(delta: number): number
 	return delta
 end
 
--- Axis arrow tip endpoints (world space).
-local function gizmoAxisTips(ox: number, oy: number, rad: number): (number, number, number, number)
-	local L = GIZMO_AXIS_LEN
+local function getCameraScale(): number
+	local cam = runtime.getEditorCamera()
+	local vfov = cam.vfov
+	if vfov < 1 then
+		vfov = screen.h / runtime.getPPU()
+	end
+	return screen.h / vfov
+end
+
+local function gizmoAxisTips(ox: number, oy: number, rad: number, axisLen: number): (number, number, number, number)
 	local c = math.cos(rad)
 	local s = math.sin(rad)
-	local x2 = ox + c * L
-	local y2 = oy + s * L
-	local x3 = ox - s * L
-	local y3 = oy + c * L
+	local x2 = ox + c * axisLen
+	local y2 = oy + s * axisLen
+	local x3 = ox - s * axisLen
+	local y3 = oy + c * axisLen
 	return x2, y2, x3, y3
 end
 
-local function tryGizmoAxisHit(sel: number, mx: number, my: number): ("axis_x" | "axis_y")?
+local function tryGizmoAxisHit(sel: number, mx: number, my: number, camScale: number): ("axis_x" | "axis_y")?
 	local wt = runtime.getWorldTransform(sel)
 	if not wt then
 		return nil
 	end
+	local axisLen = GIZMO_AXIS_LEN_PX / camScale
+	local axisHit = AXIS_HIT_PX / camScale
 	local rad = wt.angle * RAD
 	local c = math.cos(rad)
 	local s = math.sin(rad)
 	local ox, oy = wt.x, wt.y
-	local x2 = ox + c * GIZMO_AXIS_LEN
-	local y2 = oy + s * GIZMO_AXIS_LEN
-	local x3 = ox - s * GIZMO_AXIS_LEN
-	local y3 = oy + c * GIZMO_AXIS_LEN
+	local x2 = ox + c * axisLen
+	local y2 = oy + s * axisLen
+	local x3 = ox - s * axisLen
+	local y3 = oy + c * axisLen
 
 	local dX, tX = distPointToSegment(mx, my, ox, oy, x2, y2)
 	local dY, tY = distPointToSegment(mx, my, ox, oy, x3, y3)
 
-	local hitX = tX >= AXIS_T_MIN and dX <= AXIS_HIT
-	local hitY = tY >= AXIS_T_MIN and dY <= AXIS_HIT
+	local hitX = tX >= AXIS_T_MIN and dX <= axisHit
+	local hitY = tY >= AXIS_T_MIN and dY <= axisHit
 	if hitX and hitY then
 		return if dX <= dY then "axis_x" else "axis_y"
 	elseif hitX then
@@ -87,11 +95,13 @@ local function tryGizmoAxisHit(sel: number, mx: number, my: number): ("axis_x" |
 	return nil
 end
 
-local function tryGizmoRotateHit(sel: number, mx: number, my: number): boolean
+local function tryGizmoRotateHit(sel: number, mx: number, my: number, camScale: number): boolean
 	local wt = runtime.getWorldTransform(sel)
 	if not wt then
 		return false
 	end
+	local axisLen = GIZMO_AXIS_LEN_PX / camScale
+	local radialHit = ROT_ARC_HIT_RADIAL_PX / camScale
 	local ox, oy = wt.x, wt.y
 	local rad = wt.angle * RAD
 	local aMidArc = rad + math.pi / 4
@@ -106,7 +116,7 @@ local function tryGizmoRotateHit(sel: number, mx: number, my: number): boolean
 	if dAng > halfArc + ROT_ARC_HIT_ANG then
 		return false
 	end
-	return math.abs(rm - GIZMO_AXIS_LEN) <= ROT_ARC_HIT_RADIAL
+	return math.abs(rm - axisLen) <= radialHit
 end
 
 -- Editor interaction state machine.
@@ -121,18 +131,19 @@ local function updateWorld(_dt: number)
 	end
 
 	local pos = editorInput.mousePosition()
-	local mx, my = pos.x, pos.y
+	local mx, my = runtime.screenToWorld(pos.x, pos.y)
+	local camScale = getCameraScale()
+	local hitRadius = HIT_RADIUS_PX / camScale
 
 	if editorInput.mousePressed(0) then
 		local sel = editor.getSelectedEntityId()
-		local pickedProbe = editor.pickEntityAt(mx, my, HIT_RADIUS)
+		local pickedProbe = editor.pickEntityAt(mx, my, hitRadius)
 		local axisHit: ("axis_x" | "axis_y")? = nil
 		local rotateHit = false
-		-- Axes first so fat axis slubs win over the rotation arc hit band.
 		if sel ~= 0 and (pickedProbe == 0 or pickedProbe == sel) then
-			axisHit = tryGizmoAxisHit(sel, mx, my)
+			axisHit = tryGizmoAxisHit(sel, mx, my, camScale)
 			if axisHit == nil then
-				rotateHit = tryGizmoRotateHit(sel, mx, my)
+				rotateHit = tryGizmoRotateHit(sel, mx, my, camScale)
 			end
 		end
 
@@ -171,7 +182,6 @@ local function updateWorld(_dt: number)
 		if dragEntityId ~= 0 then
 			local dx = mx - dragStartLx
 			local dy = my - dragStartLy
-			-- Mouse is in world/Luau space; Transform x/y are in parent local space.
 			local dlx, dly = runtime.worldDeltaToLocal(dragEntityId, dx, dy)
 			local t = runtime.getTransform(dragEntityId)
 			if t then
@@ -232,31 +242,31 @@ local function updateWorld(_dt: number)
 end
 
 local function drawWorld(_totalTime: number)
-	draw.resetMatrix()
+	local camScale = getCameraScale()
+	local axisLen = GIZMO_AXIS_LEN_PX / camScale
+	local dotRadius = 6 / camScale
+	local tipSize = 5 / camScale
+
 	local sel = editor.getSelectedEntityId()
 	runtime.forEachEntityDrawOrder(function(entityId: number)
 		local wt = runtime.getWorldTransform(entityId)
-		local r = 6
 		local br, bg, bb, ba = 235, 235, 245, 255
 		if sel == entityId then
 			br, bg, bb, ba = 90, 255, 120, 255
 		end
-		draw.circle(wt.x, wt.y, r, br, bg, bb, ba)
+		draw.circle(wt.x, wt.y, dotRadius, br, bg, bb, ba)
 
 		if sel == entityId then
-			local axisLen = GIZMO_AXIS_LEN
 			local rad = wt.angle * RAD
 			local c = math.cos(rad)
 			local s = math.sin(rad)
 			local ox, oy = wt.x, wt.y
-			local x2, y2, x3, y3 = gizmoAxisTips(ox, oy, rad)
+			local x2, y2, x3, y3 = gizmoAxisTips(ox, oy, rad, axisLen)
 			draw.line(ox, oy, x2, y2, 255, 90, 90, 255)
 			draw.line(ox, oy, x3, y3, 90, 200, 255, 255)
-			local tip = 5
-			draw.line(x2 - tip * s, y2 + tip * c, x2 + tip * s, y2 - tip * c, 255, 90, 90, 255)
-			draw.line(x3 - tip * c, y3 - tip * s, x3 + tip * c, y3 + tip * s, 90, 200, 255, 255)
+			draw.line(x2 - tipSize * s, y2 + tipSize * c, x2 + tipSize * s, y2 - tipSize * c, 255, 90, 90, 255)
+			draw.line(x3 - tipSize * c, y3 - tipSize * s, x3 + tipSize * c, y3 + tipSize * s, 90, 200, 255, 255)
 
-			-- Short arc at gizmo radius, centered on local +X/+Y bisector.
 			local rh, gh, bh = 255, 210, 70
 			local steps = math.max(8, math.floor(20 * (GIZMO_ROT_ARC_SPAN / (math.pi / 2))))
 			local aMidArc = rad + math.pi / 4

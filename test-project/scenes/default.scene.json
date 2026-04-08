@@ -1,0 +1,42 @@
+{
+  "entities": [
+    {
+      "behaviors": [
+        {
+          "isNative": true,
+          "name": "Transform",
+          "properties": {
+            "angle": 0.0,
+            "position": [0.0, 0.0],
+            "scale": [1.0, 1.0],
+            "velocity": [0.0, 0.0]
+          }
+        },
+        {
+          "name": "Camera",
+          "properties": {
+            "vfov": 0,
+            "backgroundColor": [18, 52, 86, 255]
+          }
+        },
+        {
+          "name": "CameraTest"
+        }
+      ],
+      "drawOrder": 0,
+      "id": 1,
+      "name": "CameraTestRoot",
+      "scripts": ["CameraTest"],
+      "transform": {
+        "angle": 0.0,
+        "sx": 1.0,
+        "sy": 1.0,
+        "vx": 0.0,
+        "vy": 0.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "updateOrder": 0
+    }
+  ]
+}

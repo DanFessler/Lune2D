@@ -30,6 +30,13 @@ static int l_input_down(lua_State* L) {
         sc = SDL_SCANCODE_R;
     else if (!strcmp(name, "escape"))
         sc = SDL_SCANCODE_ESCAPE;
+    else if (!strcmp(name, "shift"))
+    {
+        const bool *k = g_eng.keys;
+        bool down = k && (k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT]);
+        lua_pushboolean(L, down);
+        return 1;
+    }
     lua_pushboolean(L, sc != SDL_SCANCODE_UNKNOWN && g_eng.keys && g_eng.keys[sc]);
     return 1;
 }

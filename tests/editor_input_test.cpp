@@ -35,6 +35,7 @@ static int test_mouse_position_update() {
 static int test_mouse_button_held() {
     eng_editor_input_reset();
     eng_editor_input_button_event(0, true);
+    eng_editor_input_sync_frame_edges();
     eng_editor_input_end_frame();
     auto s = eng_editor_input_state();
     TEST_ASSERT(s.buttonsHeld & 1, "left button should be held");
@@ -47,23 +48,26 @@ static int test_mouse_button_pressed_and_released() {
 
     // Frame 1: press left button
     eng_editor_input_button_event(0, true);
-    eng_editor_input_end_frame();
+    eng_editor_input_sync_frame_edges();
     auto s1 = eng_editor_input_state();
     TEST_ASSERT(s1.buttonsPressed & 1, "left should be pressed on frame 1");
     TEST_ASSERT(!(s1.buttonsReleased & 1), "left should not be released on frame 1");
+    eng_editor_input_end_frame();
 
     // Frame 2: no new events, button still held
-    eng_editor_input_end_frame();
+    eng_editor_input_sync_frame_edges();
     auto s2 = eng_editor_input_state();
     TEST_ASSERT(s2.buttonsHeld & 1, "left should still be held on frame 2");
     TEST_ASSERT(!(s2.buttonsPressed & 1), "left should not be 'just pressed' on frame 2");
+    eng_editor_input_end_frame();
 
     // Frame 3: release
     eng_editor_input_button_event(0, false);
-    eng_editor_input_end_frame();
+    eng_editor_input_sync_frame_edges();
     auto s3 = eng_editor_input_state();
     TEST_ASSERT(!(s3.buttonsHeld & 1), "left should not be held on frame 3");
     TEST_ASSERT(s3.buttonsReleased & 1, "left should be released on frame 3");
+    eng_editor_input_end_frame();
 
     return 0;
 }
@@ -74,6 +78,7 @@ static int test_input_inactive_during_play_mode() {
 
     eng_editor_input_set_mouse(50.0f, 50.0f);
     eng_editor_input_button_event(0, true);
+    eng_editor_input_sync_frame_edges();
     eng_editor_input_end_frame();
 
     TEST_ASSERT(!eng_editor_input_active(), "input should be inactive during play");
@@ -83,6 +88,61 @@ static int test_input_inactive_during_play_mode() {
 
     eng_editor_set_sim_ui_state(EngSimUiState::Paused);
     TEST_ASSERT(eng_editor_input_active(), "input should be active when paused");
+    return 0;
+}
+
+static int test_scroll_delta_default_zero() {
+    eng_editor_input_reset();
+    auto s = eng_editor_input_state();
+    TEST_ASSERT(std::fabs(s.scrollDelta) < 0.001f, "default scrollDelta should be 0");
+    return 0;
+}
+
+static int test_scroll_delta_accumulates() {
+    eng_editor_input_reset();
+    eng_editor_input_scroll_event(1.5f);
+    eng_editor_input_scroll_event(1.5f);
+    auto s = eng_editor_input_state();
+    TEST_ASSERT(std::fabs(s.scrollDelta - 3.0f) < 0.001f, "scroll delta should accumulate to 3.0");
+    return 0;
+}
+
+static int test_scroll_delta_resets_on_end_frame() {
+    eng_editor_input_reset();
+    eng_editor_input_scroll_event(2.0f);
+    TEST_ASSERT(std::fabs(eng_editor_input_state().scrollDelta - 2.0f) < 0.001f,
+                "scroll delta visible before end_frame");
+    eng_editor_input_end_frame();
+    auto s = eng_editor_input_state();
+    TEST_ASSERT(std::fabs(s.scrollDelta) < 0.001f, "scroll delta should reset after end_frame");
+    return 0;
+}
+
+static int test_middle_mouse_button() {
+    eng_editor_input_reset();
+    eng_editor_input_button_event(1, true);
+    eng_editor_input_sync_frame_edges();
+    auto s = eng_editor_input_state();
+    TEST_ASSERT(s.buttonsHeld & (1u << 1), "middle button (1) should be held");
+    TEST_ASSERT(s.buttonsPressed & (1u << 1), "middle button (1) should be pressed");
+    eng_editor_input_end_frame();
+
+    eng_editor_input_button_event(1, false);
+    eng_editor_input_sync_frame_edges();
+    auto s2 = eng_editor_input_state();
+    TEST_ASSERT(!(s2.buttonsHeld & (1u << 1)), "middle button released");
+    TEST_ASSERT(s2.buttonsReleased & (1u << 1), "middle button release edge");
+    eng_editor_input_end_frame();
+    return 0;
+}
+
+static int test_right_mouse_button_index_2() {
+    eng_editor_input_reset();
+    eng_editor_input_button_event(2, true);
+    eng_editor_input_sync_frame_edges();
+    eng_editor_input_end_frame();
+    auto s = eng_editor_input_state();
+    TEST_ASSERT(s.buttonsHeld & (1u << 2), "right button (2) should be held");
     return 0;
 }
 
@@ -96,6 +156,11 @@ int main() {
     RUN(test_mouse_button_held);
     RUN(test_mouse_button_pressed_and_released);
     RUN(test_input_inactive_during_play_mode);
+    RUN(test_scroll_delta_default_zero);
+    RUN(test_scroll_delta_accumulates);
+    RUN(test_scroll_delta_resets_on_end_frame);
+    RUN(test_middle_mouse_button);
+    RUN(test_right_mouse_button_index_2);
 
 #undef RUN
 

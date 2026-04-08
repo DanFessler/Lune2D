@@ -22,6 +22,13 @@
           }
         },
         {
+          "name": "Camera",
+          "properties": {
+            "vfov": 0,
+            "backgroundColor": [0, 0, 0, 255]
+          }
+        },
+        {
           "name": "GameDirector"
         }
       ],
@@ -29,6 +36,7 @@
       "id": 1,
       "name": "GameDirector",
       "scripts": [
+        "Camera",
         "GameDirector"
       ],
       "transform": {
@@ -50,8 +58,8 @@
           "properties": {
             "angle": 0.0,
             "position": [
-              205.66015625,
-              225.796875
+              0.0,
+              0.0
             ],
             "scale": [
               1.0,
@@ -91,8 +99,8 @@
         "sy": 1.0,
         "vx": 0.0,
         "vy": 0.0,
-        "x": 205.66015625,
-        "y": 225.796875
+        "x": 0.0,
+        "y": 0.0
       },
       "updateOrder": 0
     },

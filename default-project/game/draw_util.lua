@@ -42,18 +42,20 @@ local function drawLineWrapped(x1: number, y1: number, x2: number, y2: number,
 	end
 end
 
+-- Torus wrap on a playfield centered at (0,0): x in (-W/2, W/2], y in (-H/2, H/2].
 local function wrap(x: number, y: number): (number, number)
 	local W, H = screen.w, screen.h
-	if x < 0 then
+	local hw, hh = W / 2, H / 2
+	while x <= -hw do
 		x += W
 	end
-	if x > W then
+	while x > hw do
 		x -= W
 	end
-	if y < 0 then
+	while y <= -hh do
 		y += H
 	end
-	if y > H then
+	while y > hh do
 		y -= H
 	end
 	return x, y

@@ -11,6 +11,7 @@
 #include "behavior_instance.hpp"
 #include "behavior_schema.hpp"
 #include "editor_state.hpp"
+#include "engine/camera.hpp"
 #include "engine/engine.hpp"
 #include "engine/immediate_draw.hpp"
 #include "engine/scene_loader.hpp"
@@ -18,6 +19,13 @@
 #include "scene.hpp"
 
 lua_State *g_eng_lua_vm = nullptr;
+
+static bool s_visual_test_skip_editor_overlays = false;
+
+void eng_set_visual_test_skip_editor_overlays(bool skip)
+{
+    s_visual_test_skip_editor_overlays = skip;
+}
 
 void eng_lua_bind_main_vm(lua_State *L)
 {
@@ -42,6 +50,7 @@ bool eng_scene_mut_set_behavior_property(lua_State *L, uint32_t entityId, int be
     else
         sc.propertyOverrides[key] = value;
     eng_behavior_release_script_self(L, sc);
+    eng_camera_sync_from_camera_behavior_mutation(entityId, behaviorIndex);
     return true;
 }
 
@@ -309,6 +318,32 @@ static int l_runtime_registerBehavior(lua_State *L)
 
 void eng_scene_draw_lua_scripts(lua_State *L, Scene &scene, float totalTime)
 {
+    auto &cam = eng_camera_state();
+    bool usePlayCam = (eng_editor_sim_ui_state() == EngSimUiState::Playing &&
+                       cam.activeCameraEntityId != 0 &&
+                       scene.entity(cam.activeCameraEntityId));
+    if (usePlayCam)
+    {
+        auto matrices = scene.computeWorldMatrices();
+        auto it = matrices.find(cam.activeCameraEntityId);
+        if (it != matrices.end())
+        {
+            const Affine2D &wm = it->second;
+            float cx = wm.tx;
+            float cy = wm.ty;
+            float ca = atan2f(wm.c, wm.a) * (180.f / 3.14159265f);
+            float vf = cam.playCamVfov > 0 ? cam.playCamVfov : (float)s_game_lu_h;
+            cam.viewMatrix = eng_compute_view_matrix(cx, cy, ca, vf, s_game_lu_w, s_game_lu_h);
+            cam.inverseViewMatrix = cam.viewMatrix.inverse();
+        }
+        else
+            eng_camera_compute_view(s_game_lu_w, s_game_lu_h);
+    }
+    else
+        eng_camera_compute_view(s_game_lu_w, s_game_lu_h);
+
+    const Affine2D &viewMatrix = cam.viewMatrix;
+
     auto worldMatrices = scene.computeWorldMatrices();
 
     scene.forEachEntitySortedByDrawOrder([&](Entity &e)
@@ -318,7 +353,7 @@ void eng_scene_draw_lua_scripts(lua_State *L, Scene &scene, float totalTime)
 
         auto it = worldMatrices.find(e.id);
         Affine2D wm = (it != worldMatrices.end()) ? it->second : Affine2D::identity();
-        eng_draw_push_matrix(wm);
+        eng_draw_push_matrix(viewMatrix.multiply(wm));
 
         for (BehaviorSlot& b : e.behaviors) {
             if (b.isNative) continue;
@@ -368,8 +403,12 @@ static int l_runtime_forEachEntityDrawOrder(lua_State *L)
 
 void eng_scene_draw_editor_overlays(lua_State *L, Scene &scene, float totalTime)
 {
+    if (s_visual_test_skip_editor_overlays)
+        return;
     if (!eng_editor_overlays_enabled())
         return;
+
+    const Affine2D &viewMatrix = eng_camera_state().viewMatrix;
 
     lua_getglobal(L, "_EDITOR_BEHAVIORS");
     if (!lua_istable(L, -1))
@@ -377,6 +416,8 @@ void eng_scene_draw_editor_overlays(lua_State *L, Scene &scene, float totalTime)
         lua_pop(L, 1);
         return;
     }
+    eng_draw_push_matrix(viewMatrix);
+
     lua_getfield(L, -1, "Transform");
     if (lua_istable(L, -1))
     {
@@ -398,13 +439,15 @@ void eng_scene_draw_editor_overlays(lua_State *L, Scene &scene, float totalTime)
     else
         lua_pop(L, 2);
 
+    eng_draw_pop_matrix();
+
     auto worldMatrices = scene.computeWorldMatrices();
     scene.forEachEntitySortedByDrawOrder([&](Entity &e) {
         if (!e.active)
             return;
         auto it = worldMatrices.find(e.id);
         Affine2D wm = (it != worldMatrices.end()) ? it->second : Affine2D::identity();
-        eng_draw_push_matrix(wm);
+        eng_draw_push_matrix(viewMatrix.multiply(wm));
         for (BehaviorSlot &b : e.behaviors)
         {
             if (b.isNative) continue;
@@ -445,7 +488,41 @@ void eng_scene_update_editor_behaviors(lua_State *L, Scene &scene, float dt)
     if (!eng_editor_overlays_enabled())
         return;
 
-    // Global editor behavior update (e.g. Transform.updateWorld for selection/drag).
+    lua_getglobal(L, "_EDITOR_BEHAVIORS");
+    if (!lua_istable(L, -1))
+    {
+        lua_pop(L, 1);
+        return;
+    }
+
+    // EditorCamera.updateWorld runs BEFORE Transform so the view matrix is
+    // current when gizmo picking converts screen coords to world coords.
+    lua_getfield(L, -1, "EditorCamera");
+    if (lua_istable(L, -1))
+    {
+        lua_getfield(L, -1, "updateWorld");
+        lua_remove(L, -2);
+        if (lua_isfunction(L, -1))
+        {
+            lua_pushnumber(L, dt);
+            if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+            {
+                SDL_Log("Lua editor EditorCamera.updateWorld: %s", lua_tostring(L, -1));
+                lua_pop(L, 1);
+            }
+        }
+        else
+            lua_pop(L, 1);
+    }
+    else
+        lua_pop(L, 1);
+
+    // Pop the _EDITOR_BEHAVIORS table from the initial getglobal.
+    lua_pop(L, 1);
+
+    // Recompute view matrix after EditorCamera may have changed camera state.
+    eng_camera_compute_view(s_game_lu_w, s_game_lu_h);
+
     lua_getglobal(L, "_EDITOR_BEHAVIORS");
     if (!lua_istable(L, -1))
     {
@@ -591,6 +668,92 @@ void eng_scene_hudplay_lua_scripts(lua_State *L, Scene &scene)
         } });
 }
 
+// ── Camera API ───────────────────────────────────────────────────────────────
+
+static int l_runtime_setPPU(lua_State *L)
+{
+    float ppu = (float)luaL_checknumber(L, 1);
+    if (ppu < 1e-6f) ppu = 1.f;
+    eng_camera_state().ppu = ppu;
+    return 0;
+}
+
+static int l_runtime_getPPU(lua_State *L)
+{
+    lua_pushnumber(L, eng_camera_state().ppu);
+    return 1;
+}
+
+static int l_runtime_setActiveCamera(lua_State *L)
+{
+    uint32_t id = (uint32_t)luaL_checkinteger(L, 1);
+    eng_camera_state().activeCameraEntityId = id;
+    return 0;
+}
+
+static int l_runtime_getActiveCameraEntityId(lua_State *L)
+{
+    lua_pushinteger(L, (lua_Integer)eng_camera_state().activeCameraEntityId);
+    return 1;
+}
+
+static int l_runtime_setCameraProperties(lua_State *L)
+{
+    auto &cam = eng_camera_state();
+    cam.playCamVfov = (float)luaL_checknumber(L, 1);
+    cam.playBgR = (uint8_t)luaL_optinteger(L, 2, 0);
+    cam.playBgG = (uint8_t)luaL_optinteger(L, 3, 0);
+    cam.playBgB = (uint8_t)luaL_optinteger(L, 4, 0);
+    return 0;
+}
+
+static int l_runtime_setEditorCamera(lua_State *L)
+{
+    auto &cam = eng_camera_state();
+    cam.editorX = (float)luaL_checknumber(L, 1);
+    cam.editorY = (float)luaL_checknumber(L, 2);
+    cam.editorAngle = (float)luaL_optnumber(L, 3, 0.0);
+    cam.editorVfov = (float)luaL_checknumber(L, 4);
+    return 0;
+}
+
+static int l_runtime_screenToWorld(lua_State *L)
+{
+    float sx = (float)luaL_checknumber(L, 1);
+    float sy = (float)luaL_checknumber(L, 2);
+    float wx, wy;
+    eng_camera_screen_to_world(sx, sy, &wx, &wy);
+    lua_pushnumber(L, wx);
+    lua_pushnumber(L, wy);
+    return 2;
+}
+
+static int l_runtime_worldToScreen(lua_State *L)
+{
+    float wx = (float)luaL_checknumber(L, 1);
+    float wy = (float)luaL_checknumber(L, 2);
+    float sx, sy;
+    eng_camera_world_to_screen(wx, wy, &sx, &sy);
+    lua_pushnumber(L, sx);
+    lua_pushnumber(L, sy);
+    return 2;
+}
+
+static int l_runtime_getEditorCamera(lua_State *L)
+{
+    auto &cam = eng_camera_state();
+    lua_newtable(L);
+    lua_pushnumber(L, cam.editorX);
+    lua_setfield(L, -2, "x");
+    lua_pushnumber(L, cam.editorY);
+    lua_setfield(L, -2, "y");
+    lua_pushnumber(L, cam.editorAngle);
+    lua_setfield(L, -2, "angle");
+    lua_pushnumber(L, cam.editorVfov);
+    lua_setfield(L, -2, "vfov");
+    return 1;
+}
+
 void eng_lua_register_runtime(lua_State *L)
 {
     lua_newtable(L);
@@ -638,5 +801,23 @@ void eng_lua_register_runtime(lua_State *L)
     lua_setfield(L, -2, "worldDeltaToLocal");
     lua_pushcfunction(L, l_runtime_forEachEntityDrawOrder, "runtime.forEachEntityDrawOrder");
     lua_setfield(L, -2, "forEachEntityDrawOrder");
+    lua_pushcfunction(L, l_runtime_setPPU, "runtime.setPPU");
+    lua_setfield(L, -2, "setPPU");
+    lua_pushcfunction(L, l_runtime_getPPU, "runtime.getPPU");
+    lua_setfield(L, -2, "getPPU");
+    lua_pushcfunction(L, l_runtime_setActiveCamera, "runtime.setActiveCamera");
+    lua_setfield(L, -2, "setActiveCamera");
+    lua_pushcfunction(L, l_runtime_getActiveCameraEntityId, "runtime.getActiveCameraEntityId");
+    lua_setfield(L, -2, "getActiveCameraEntityId");
+    lua_pushcfunction(L, l_runtime_setCameraProperties, "runtime.setCameraProperties");
+    lua_setfield(L, -2, "setCameraProperties");
+    lua_pushcfunction(L, l_runtime_setEditorCamera, "runtime.setEditorCamera");
+    lua_setfield(L, -2, "setEditorCamera");
+    lua_pushcfunction(L, l_runtime_getEditorCamera, "runtime.getEditorCamera");
+    lua_setfield(L, -2, "getEditorCamera");
+    lua_pushcfunction(L, l_runtime_screenToWorld, "runtime.screenToWorld");
+    lua_setfield(L, -2, "screenToWorld");
+    lua_pushcfunction(L, l_runtime_worldToScreen, "runtime.worldToScreen");
+    lua_setfield(L, -2, "worldToScreen");
     lua_setglobal(L, "runtime");
 }
