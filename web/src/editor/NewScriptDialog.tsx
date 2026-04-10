@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { engine } from "../engineProxy";
+import { saveSceneUndoState } from "./sceneUndo";
 import { reloadBehaviors } from "../luaEditorBridge";
 import { writeProjectFile } from "../projectFileBridge";
 import {
@@ -60,6 +61,7 @@ export function NewScriptDialog({
       }
       await reloadBehaviors();
       await engine.runtime.addScript(entityId, base);
+      saveSceneUndoState();
       onOpenLuaFile(relPath, template);
       onScriptsChanged?.();
       onClose();

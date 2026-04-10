@@ -210,6 +210,24 @@ export const sceneOpDefs: SceneOpDef[] = [
         "type": "number"
       }
     ]
+  },
+  {
+    "op": "editor.saveUndoState",
+    "args": [],
+    "returns": "boolean"
+  },
+  {
+    "op": "editor.undo",
+    "args": []
+  },
+  {
+    "op": "editor.redo",
+    "args": []
+  },
+  {
+    "op": "editor.getSessionState",
+    "args": [],
+    "returns": "any"
   }
 ];
 
@@ -229,6 +247,10 @@ export type SceneOp_runtime_reorderScript = { op: "runtime.reorderScript"; args:
 export type SceneOp_runtime_setParent = { op: "runtime.setParent"; args: [number, number] };
 export type SceneOp_runtime_removeParent = { op: "runtime.removeParent"; args: [number] };
 export type SceneOp_runtime_setTransform = { op: "runtime.setTransform"; args: [number, string, number] };
+export type SceneOp_editor_saveUndoState = { op: "editor.saveUndoState"; args: [] };
+export type SceneOp_editor_undo = { op: "editor.undo"; args: [] };
+export type SceneOp_editor_redo = { op: "editor.redo"; args: [] };
+export type SceneOp_editor_getSessionState = { op: "editor.getSessionState"; args: [] };
 
 export type SceneOp =
   | SceneOp_runtime_loadScene
@@ -245,7 +267,11 @@ export type SceneOp =
   | SceneOp_runtime_reorderScript
   | SceneOp_runtime_setParent
   | SceneOp_runtime_removeParent
-  | SceneOp_runtime_setTransform;
+  | SceneOp_runtime_setTransform
+  | SceneOp_editor_saveUndoState
+  | SceneOp_editor_undo
+  | SceneOp_editor_redo
+  | SceneOp_editor_getSessionState;
 
 export type SceneOpResult = { ok: boolean; error?: string; result?: unknown };
 
@@ -267,6 +293,14 @@ export interface EngineRuntimeApi {
   setTransform(id: number, field: string, value: number): Promise<void>;
 }
 
+export interface EngineEditorApi {
+  saveUndoState(): Promise<boolean>;
+  undo(): Promise<void>;
+  redo(): Promise<void>;
+  getSessionState(): Promise<unknown>;
+}
+
 export interface EngineApi {
   runtime: EngineRuntimeApi;
+  editor: EngineEditorApi;
 }

@@ -11,6 +11,7 @@
 #include "behavior_instance.hpp"
 #include "behavior_schema.hpp"
 #include "editor_state.hpp"
+#include "editor_undo.hpp"
 #include "engine/camera.hpp"
 #include "engine/engine.hpp"
 #include "engine/immediate_draw.hpp"
@@ -102,7 +103,9 @@ static int l_runtime_destroy(lua_State *L)
 
 static int l_runtime_clearScene(lua_State * /*L*/)
 {
+    eng_editor_undo_reset();
     g_scene.clear();
+    eng_editor_undo_save_state();
     return 0;
 }
 
@@ -117,9 +120,11 @@ static int l_runtime_loadScene(lua_State *L)
     std::string fullPath = std::string(base) + relPath;
     lua_pop(L, 2);
 
+    eng_editor_undo_reset();
     g_scene.clear();
     if (!eng_load_scene(g_scene, fullPath))
         luaL_error(L, "loadScene failed: %s", fullPath.c_str());
+    eng_editor_undo_save_state();
     return 0;
 }
 

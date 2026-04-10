@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   reloadScripts,
   setGamePaused,
@@ -6,10 +6,15 @@ import {
 } from "./luaEditorBridge";
 import "./Toolbar.css";
 
-type SimState = "stopped" | "playing" | "paused";
+export type ToolbarSimState = "stopped" | "playing" | "paused";
 
-export function Toolbar() {
-  const [simState, setSimState] = useState<SimState>("stopped");
+export type ToolbarProps = {
+  /** Fired when play / pause / stop changes native editor sim mode (for scene undo, etc.). */
+  onSimUiStateChange?: (s: ToolbarSimState) => void;
+};
+
+export function Toolbar({ onSimUiStateChange }: ToolbarProps) {
+  const [simState, setSimState] = useState<ToolbarSimState>("stopped");
   const [error, setError] = useState<string | null>(null);
 
   const onPlay = useCallback(async () => {
@@ -45,6 +50,10 @@ export function Toolbar() {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, []);
+
+  useEffect(() => {
+    onSimUiStateChange?.(simState);
+  }, [onSimUiStateChange, simState]);
 
   return (
     <div className="app-toolbar">

@@ -13,5 +13,9 @@
   { "op": "runtime.reorderScript",  "args": [{ "name": "id", "type": "number" }, { "name": "fromIndex", "type": "number" }, { "name": "toIndex", "type": "number" }] },
   { "op": "runtime.setParent",      "args": [{ "name": "id", "type": "number" }, { "name": "parentId", "type": "number" }] },
   { "op": "runtime.removeParent",   "args": [{ "name": "id", "type": "number" }] },
-  { "op": "runtime.setTransform",   "args": [{ "name": "id", "type": "number" }, { "name": "field", "type": "string" }, { "name": "value", "type": "number" }] }
+  { "op": "runtime.setTransform",   "args": [{ "name": "id", "type": "number" }, { "name": "field", "type": "string" }, { "name": "value", "type": "number" }] },
+  { "op": "editor.saveUndoState", "args": [], "returns": "boolean" },
+  { "op": "editor.undo", "args": [] },
+  { "op": "editor.redo", "args": [] },
+  { "op": "editor.getSessionState", "args": [], "returns": "any" }
 ]

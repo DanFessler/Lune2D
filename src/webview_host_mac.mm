@@ -11,6 +11,7 @@
 
 #include "webview_host.hpp"
 #include "editor_state.hpp"
+#include "editor_undo.hpp"
 #include "engine/engine.hpp"
 #include "engine/game_keyboard.hpp"
 #include "engine/lua/lua_runtime.hpp"
@@ -843,6 +844,37 @@ static NSString* lune2d_shared_settings_full_path(NSString* rel, NSError** outEr
         return;
     }
 
+    if ([op isEqualToString:@"editor.saveUndoState"]) {
+        bool saved = eng_editor_undo_save_state();
+        script_bridge_send(@{@"requestId" : rid, @"ok" : @YES, @"result" : @(saved ? YES : NO)});
+        return;
+    }
+    if ([op isEqualToString:@"editor.undo"]) {
+        bool ok = eng_editor_undo_try_undo();
+        script_bridge_send(ok ? @{@"requestId" : rid, @"ok" : @YES}
+                               : @{@"requestId" : rid, @"ok" : @NO, @"error" : @"undo not available"});
+        return;
+    }
+    if ([op isEqualToString:@"editor.redo"]) {
+        bool ok = eng_editor_undo_try_redo();
+        script_bridge_send(ok ? @{@"requestId" : rid, @"ok" : @YES}
+                               : @{@"requestId" : rid, @"ok" : @NO, @"error" : @"redo not available"});
+        return;
+    }
+    if ([op isEqualToString:@"editor.getSessionState"]) {
+        uint32_t sim = (uint32_t)eng_editor_sim_ui_state();
+        script_bridge_send(@{
+            @"requestId" : rid,
+            @"ok" : @YES,
+            @"result" : @{
+                @"canUndo" : @(eng_editor_undo_can_undo() ? YES : NO),
+                @"canRedo" : @(eng_editor_undo_can_redo() ? YES : NO),
+                @"simUiState" : @(sim),
+            }
+        });
+        return;
+    }
+
     // ── Scene mutation ops (two-way bridge) ──────────────────────────────
     NSArray* args = d[@"args"];
 
@@ -869,11 +901,13 @@ static NSString* lune2d_shared_settings_full_path(NSString* rel, NSError** outEr
             return;
         }
         std::string utf8 = std::string([full UTF8String]);
+        eng_editor_undo_reset();
         g_scene.clear();
         if (!eng_load_scene(g_scene, utf8)) {
             script_bridge_send(@{@"requestId" : rid, @"ok" : @NO, @"error" : @"loadScene failed"});
             return;
         }
+        eng_editor_undo_save_state();
         script_bridge_send(@{@"requestId" : rid, @"ok" : @YES});
         return;
     }
@@ -995,7 +1029,7 @@ static NSString* lune2d_shared_settings_full_path(NSString* rel, NSError** outEr
         id        val          = ([args count] > 3) ? args[3] : [NSNull null];
         bool      erase        = (val == nil || val == [NSNull null]);
         nlohmann::json jValue  = erase ? nlohmann::json() : nsBridgeArgToJson(val);
-        bool ok                = eng_scene_mut_set_behavior_property(
+        bool ok = eng_scene_mut_set_behavior_property(
             g_eng_lua_vm, eid, si, [keyStr UTF8String], erase, jValue);
         script_bridge_send(ok ? @{@"requestId" : rid, @"ok" : @YES}
                                 : @{@"requestId" : rid, @"ok" : @NO, @"error" : @"setBehaviorProperty failed"});

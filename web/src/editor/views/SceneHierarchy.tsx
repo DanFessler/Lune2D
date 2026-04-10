@@ -9,6 +9,7 @@ import {
   hierarchyLayoutSignature,
 } from "../../engineBridge";
 import { engine } from "../../engineProxy";
+import { saveSceneUndoState } from "../sceneUndo";
 import HierarchyList from "../components/HierarchyList";
 import styles from "./Hierarchy.module.css";
 import {
@@ -118,6 +119,7 @@ export default function SceneHierarchy({
           console.error(e);
         }
       }
+      saveSceneUndoState();
     },
     [tree],
   );
@@ -172,6 +174,7 @@ export default function SceneHierarchy({
         engine.runtime.setDrawOrder(Number(e.id), i);
         engine.runtime.setUpdateOrder(Number(e.id), i);
       });
+      saveSceneUndoState();
     } else {
       const parentKey = String(targetId);
       engine.runtime.setParent(Number(activeId), Number(targetId));
@@ -183,6 +186,7 @@ export default function SceneHierarchy({
         engine.runtime.setDrawOrder(Number(e.id), i);
         engine.runtime.setUpdateOrder(Number(e.id), i);
       });
+      saveSceneUndoState();
     }
   }
 

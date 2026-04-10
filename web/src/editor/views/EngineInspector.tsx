@@ -18,6 +18,7 @@ import {
   type EngineEntity,
 } from "../../engineBridge";
 import { engine } from "../../engineProxy";
+import { saveSceneUndoState } from "../sceneUndo";
 import {
   listProjectDir,
   readProjectFile,
@@ -248,7 +249,10 @@ function BehaviorBoolRow({
         <input
           type="checkbox"
           checked={checked}
-          onChange={(e) => onCommit(e.target.checked)}
+          onChange={(e) => {
+            onCommit(e.target.checked);
+            saveSceneUndoState();
+          }}
         />
       </label>
     </>
@@ -335,6 +339,17 @@ function BehaviorColorRow({
     };
   }, [open, updatePopoverPosition]);
 
+  const colorDirtyRef = useRef(false);
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!open && wasOpen && colorDirtyRef.current) {
+      colorDirtyRef.current = false;
+      saveSceneUndoState();
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -363,6 +378,7 @@ function BehaviorColorRow({
     (c: RgbaColor) => {
       setPickerColor(c);
       pushColorToEngine(c);
+      colorDirtyRef.current = true;
     },
     [pushColorToEngine],
   );
@@ -455,6 +471,7 @@ function BehaviorNumberRow({
     if (field.max !== undefined) v = Math.min(field.max, v);
     if (field.type === "integer") v = Math.round(v);
     onCommit(v);
+    saveSceneUndoState();
   };
 
   const useSlider =
@@ -495,6 +512,8 @@ function BehaviorNumberRow({
           step={field.type === "integer" ? 1 : "any"}
           value={safe}
           aria-label={`${label} slider`}
+          onPointerUp={() => saveSceneUndoState()}
+          onPointerCancel={() => saveSceneUndoState()}
           onChange={(e) => pushLive(parseFloat(e.target.value))}
         />
         <input
@@ -556,6 +575,7 @@ function BehaviorVectorRow({
       return;
     }
     onCommit([nextX, nextY]);
+    saveSceneUndoState();
   };
 
   return (
@@ -604,7 +624,10 @@ function BehaviorEnumRow({
       <select
         className={`${styles.fieldInput} ${styles.fieldSpan2}`}
         value={v}
-        onChange={(e) => onCommit(e.target.value)}
+        onChange={(e) => {
+          onCommit(e.target.value);
+          saveSceneUndoState();
+        }}
       >
         {opts.map((opt) => (
           <option key={opt} value={opt}>
@@ -770,7 +793,10 @@ function BehaviorAssetRow({
   }, [local]);
 
   const commit = () => {
-    if (local !== v) onCommit(local);
+    if (local !== v) {
+      onCommit(local);
+      saveSceneUndoState();
+    }
   };
 
   return (
@@ -807,6 +833,7 @@ function BehaviorAssetRow({
           onPick={(path) => {
             setLocal(path);
             onCommit(path);
+            saveSceneUndoState();
             setPickerOpen(false);
           }}
         />
@@ -835,7 +862,10 @@ function BehaviorStringRow({
     );
   }, [value, field.name]);
   const commit = () => {
-    if (local !== v) onCommit(local);
+    if (local !== v) {
+      onCommit(local);
+      saveSceneUndoState();
+    }
   };
   return (
     <>
@@ -887,12 +917,14 @@ function BehaviorJsonRow({
     if (t === "object" || t === "vector") {
       try {
         onCommit(JSON.parse(local) as unknown);
+        saveSceneUndoState();
       } catch {
         setLocal(raw);
       }
       return;
     }
     onCommit(local);
+    saveSceneUndoState();
   };
   return (
     <>
@@ -1080,7 +1112,9 @@ function BehaviorList({
             setOptimisticEntity(optimistic);
           });
         }
-        void engine.runtime.reorderScript(entityId, fromBehIdx, toBehIdx);
+        void engine.runtime.reorderScript(entityId, fromBehIdx, toBehIdx).then(() => {
+          saveSceneUndoState();
+        });
       }
     }
     setActiveChildren(null);
@@ -1169,7 +1203,10 @@ function BehaviorList({
                   onRemove={
                     isEngine
                       ? undefined
-                      : () => engine.runtime.removeScript(entityId, behIdx)
+                      : () =>
+                          void engine.runtime.removeScript(entityId, behIdx).then(() => {
+                            saveSceneUndoState();
+                          })
                   }
                   sortableActivatorRef={handle.setActivatorNodeRef}
                   sortableListeners={handle.listeners}
@@ -1213,6 +1250,7 @@ export default function EngineInspector({
   const commitName = () => {
     if (entity && localName !== entity.name) {
       engine.runtime.setName(entityId, localName);
+      saveSceneUndoState();
     }
   };
 
@@ -1250,7 +1288,10 @@ export default function EngineInspector({
           type="checkbox"
           checked={entity.active}
           aria-label="Entity active"
-          onChange={() => engine.runtime.setActive(entityId, !entity.active)}
+          onChange={() => {
+            engine.runtime.setActive(entityId, !entity.active);
+            saveSceneUndoState();
+          }}
           onClick={(e) => e.stopPropagation()}
         />
         <PiBoundingBoxFill style={{ width: "16px", height: "16px" }} />

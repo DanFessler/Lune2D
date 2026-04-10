@@ -11,7 +11,12 @@ import {
   sceneHierarchyTabActions,
 } from "./editor/tabActions";
 import { LuaEditorPanel, type LuaEditorOpenRequest } from "./LuaEditorPanel";
-import { Toolbar } from "./Toolbar";
+import { Toolbar, type ToolbarSimState } from "./Toolbar";
+import {
+  fetchEditorSessionState,
+  saveSceneUndoState,
+  sceneUndoHotkeyDecision,
+} from "./editor/sceneUndo";
 import type { SceneOpResult } from "./generated/sceneOps";
 import { listBehaviors } from "./luaEditorBridge";
 import { engine, unwrapSceneNumber } from "./engineProxy";
@@ -33,6 +38,8 @@ const DOCKABLE_CHROME: {
 
 export default function App() {
   const [gameSurface, setGameSurface] = useState<HTMLDivElement | null>(null);
+  /** Mirrors `Toolbar` / native sim UI; scene undo is disabled while playing. */
+  const [simUiState, setSimUiState] = useState<ToolbarSimState>("stopped");
   const entities = useEngineEntities();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Skip pushing selection to native when it came from viewport/Luau (avoids races + echo). */
@@ -110,6 +117,31 @@ export default function App() {
   }, []);
 
   useGameRectBridge(gameSurface);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const d = sceneUndoHotkeyDecision(e, e.target, simUiState);
+      if (d.action === "none") return;
+      e.preventDefault();
+      void (async () => {
+        try {
+          const st = await fetchEditorSessionState();
+          if (!st || st.simUiState === 1) return;
+          if (d.kind === "undo") {
+            if (!st.canUndo) return;
+            await engine.editor.undo();
+          } else {
+            if (!st.canRedo) return;
+            await engine.editor.redo();
+          }
+        } catch {
+          /* empty stack, bridge offline, etc. */
+        }
+      })();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [simUiState]);
 
   const selected = useMemo(
     () => entities.find((e) => e.id === selectedId) ?? null,
@@ -198,6 +230,7 @@ export default function App() {
   const onNewEntity = useCallback(async () => {
     try {
       const res = await engine.runtime.spawn("Entity");
+      saveSceneUndoState();
       const id = unwrapSceneNumber(res as unknown as SceneOpResult);
       setSelectedId(String(id));
     } catch (e) {
@@ -229,7 +262,7 @@ export default function App() {
         DOCKABLE_CHROME.radius,
       )}
     >
-      <Toolbar />
+      <Toolbar onSimUiStateChange={setSimUiState} />
       <div className="hud-dock">
         <Dockable.Root
           key={dockBootKey}

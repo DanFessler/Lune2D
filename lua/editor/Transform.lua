@@ -124,6 +124,7 @@ local state: "idle" | "dragging_free" | "dragging_axis_x" | "dragging_axis_y" | 
 local dragEntityId: number = 0
 local dragStartLx: number = 0
 local dragStartLy: number = 0
+local dragMutated: boolean = false
 
 local function updateWorld(_dt: number)
 	if not editorInput then
@@ -153,18 +154,21 @@ local function updateWorld(_dt: number)
 			dragEntityId = sel
 			dragStartLx = mx
 			dragStartLy = my
+			dragMutated = false
 		elseif axisHit == "axis_y" then
 			editor.setSelectedEntity(sel)
 			state = "dragging_axis_y"
 			dragEntityId = sel
 			dragStartLx = mx
 			dragStartLy = my
+			dragMutated = false
 		elseif rotateHit then
 			editor.setSelectedEntity(sel)
 			state = "dragging_rotate"
 			dragEntityId = sel
 			dragStartLx = mx
 			dragStartLy = my
+			dragMutated = false
 		else
 			local picked = pickedProbe
 			editor.setSelectedEntity(picked)
@@ -173,9 +177,11 @@ local function updateWorld(_dt: number)
 				dragEntityId = picked
 				dragStartLx = mx
 				dragStartLy = my
+				dragMutated = false
 			else
 				state = "idle"
 				dragEntityId = 0
+				dragMutated = false
 			end
 		end
 	elseif state == "dragging_free" and editorInput.mouseDown(0) then
@@ -187,6 +193,7 @@ local function updateWorld(_dt: number)
 			if t then
 				runtime.setTransform(dragEntityId, "x", t.x + dlx)
 				runtime.setTransform(dragEntityId, "y", t.y + dly)
+				dragMutated = true
 			end
 			dragStartLx = mx
 			dragStartLy = my
@@ -217,6 +224,7 @@ local function updateWorld(_dt: number)
 				local dlx, dly = runtime.worldDeltaToLocal(dragEntityId, wdx, wdy)
 				runtime.setTransform(dragEntityId, "x", t.x + dlx)
 				runtime.setTransform(dragEntityId, "y", t.y + dly)
+				dragMutated = true
 			end
 			dragStartLx = mx
 			dragStartLy = my
@@ -231,13 +239,18 @@ local function updateWorld(_dt: number)
 				local a1 = math.atan2(my - oy, mx - ox)
 				local dRad = unwrapAngleRad(a1 - a0)
 				runtime.setTransform(dragEntityId, "angle", t.angle + math.deg(dRad))
+				dragMutated = true
 			end
 			dragStartLx = mx
 			dragStartLy = my
 		end
 	elseif editorInput.mouseReleased(0) then
+		if dragEntityId ~= 0 and dragMutated then
+			editor.saveUndoState()
+		end
 		state = "idle"
 		dragEntityId = 0
+		dragMutated = false
 	end
 end
 

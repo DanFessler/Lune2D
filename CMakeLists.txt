@@ -47,6 +47,7 @@ add_executable(lune2d
     src/main.cpp
     src/scene.cpp
     src/editor_state.cpp
+    src/editor_undo.cpp
     src/editor_pick.cpp
     src/editor_bridge.cpp
     src/webview_viewport.cpp
@@ -103,6 +104,27 @@ target_include_directories(editor_input_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua)
 add_test(NAME editor_input COMMAND editor_input_tests)
+
+add_executable(editor_undo_tests
+    tests/editor_undo_test.cpp
+    tests/lua_vm_stub.cpp
+    src/editor_undo.cpp
+    src/editor_state.cpp
+    src/scene.cpp
+    src/engine/scene_loader.cpp
+    src/engine/lua/behavior_schema.cpp
+    src/engine/lua/behavior_instance.cpp
+    src/engine/lua/lua_vm_lifecycle.cpp
+    src/engine/engine.cpp)
+target_include_directories(editor_undo_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine/lua
+    ${luau_SOURCE_DIR}/VM/include)
+target_link_libraries(editor_undo_tests PRIVATE
+    SDL3::SDL3
+    Luau.VM
+    nlohmann_json::nlohmann_json)
+add_test(NAME editor_undo COMMAND editor_undo_tests)
 
 add_executable(affine2d_tests tests/affine2d_test.cpp)
 target_include_directories(affine2d_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

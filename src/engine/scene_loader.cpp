@@ -85,23 +85,10 @@ void applyEntityJson(Scene& scene, uint32_t id, const json& ent) {
 
 } // namespace
 
-bool eng_load_scene(Scene& scene, const std::string& jsonPath) {
-    std::ifstream file(jsonPath);
-    if (!file.is_open()) {
-        SDL_Log("eng_load_scene: cannot open %s", jsonPath.c_str());
-        return false;
-    }
-
-    json doc;
-    try {
-        doc = json::parse(file);
-    } catch (const json::parse_error& e) {
-        SDL_Log("eng_load_scene: JSON parse error in %s: %s", jsonPath.c_str(), e.what());
-        return false;
-    }
-
+static bool eng_apply_scene_json_document(Scene& scene, const json& doc, const char* logCtx)
+{
     if (!doc.contains("entities") || !doc["entities"].is_array()) {
-        SDL_Log("eng_load_scene: missing 'entities' array in %s", jsonPath.c_str());
+        SDL_Log("eng_load_scene: missing 'entities' array in %s", logCtx);
         return false;
     }
 
@@ -113,7 +100,7 @@ bool eng_load_scene(Scene& scene, const std::string& jsonPath) {
         explicitIds = entities[0].contains("id");
         for (const auto& ent : entities) {
             if (ent.contains("id") != explicitIds) {
-                SDL_Log("eng_load_scene: mixed 'id' / no-id entities in %s", jsonPath.c_str());
+                SDL_Log("eng_load_scene: mixed 'id' / no-id entities in %s", logCtx);
                 return false;
             }
         }
@@ -145,12 +132,43 @@ bool eng_load_scene(Scene& scene, const std::string& jsonPath) {
         }
     }
 
-    SDL_Log("eng_load_scene: loaded %zu entities from %s",
-            entities.size(), jsonPath.c_str());
+    SDL_Log("eng_load_scene: loaded %zu entities from %s", entities.size(), logCtx);
     return true;
 }
 
-bool eng_save_scene(const Scene& scene, const std::string& jsonPath) {
+bool eng_load_scene(Scene& scene, const std::string& jsonPath)
+{
+    std::ifstream file(jsonPath);
+    if (!file.is_open()) {
+        SDL_Log("eng_load_scene: cannot open %s", jsonPath.c_str());
+        return false;
+    }
+
+    json doc;
+    try {
+        doc = json::parse(file);
+    } catch (const json::parse_error& e) {
+        SDL_Log("eng_load_scene: JSON parse error in %s: %s", jsonPath.c_str(), e.what());
+        return false;
+    }
+
+    return eng_apply_scene_json_document(scene, doc, jsonPath.c_str());
+}
+
+bool eng_load_scene_from_json_string(Scene& scene, const std::string& jsonUtf8)
+{
+    json doc;
+    try {
+        doc = json::parse(jsonUtf8);
+    } catch (const json::parse_error& e) {
+        SDL_Log("eng_load_scene: JSON parse error in <string>: %s", e.what());
+        return false;
+    }
+    return eng_apply_scene_json_document(scene, doc, "<string>");
+}
+
+static json eng_scene_to_json_object(const Scene& scene)
+{
     json        doc = json::object();
     json        arr = json::array();
     std::vector<const Entity*> sorted = scene.entitiesSortedById();
@@ -166,7 +184,6 @@ bool eng_save_scene(const Scene& scene, const std::string& jsonPath) {
         if (e.parentId != 0)
             ent["parentId"] = e.parentId;
 
-        // Save using the new "behaviors" array format.
         json behaviors = json::array();
         for (const auto& b : e.behaviors) {
             json slot;
@@ -186,7 +203,6 @@ bool eng_save_scene(const Scene& scene, const std::string& jsonPath) {
         }
         ent["behaviors"] = behaviors;
 
-        // Also write legacy "transform" and "scripts" fields for backward compat during transition.
         const Transform *t = e.getTransform();
         if (t) {
             json tf;
@@ -218,7 +234,17 @@ bool eng_save_scene(const Scene& scene, const std::string& jsonPath) {
         arr.push_back(ent);
     }
     doc["entities"] = arr;
+    return doc;
+}
 
+std::string eng_scene_to_json_string(const Scene& scene)
+{
+    return eng_scene_to_json_object(scene).dump();
+}
+
+bool eng_save_scene(const Scene& scene, const std::string& jsonPath)
+{
+    json        doc = eng_scene_to_json_object(scene);
     std::ofstream out(jsonPath);
     if (!out.is_open()) {
         SDL_Log("eng_save_scene: cannot write %s", jsonPath.c_str());
@@ -229,6 +255,7 @@ bool eng_save_scene(const Scene& scene, const std::string& jsonPath) {
         SDL_Log("eng_save_scene: write failed %s", jsonPath.c_str());
         return false;
     }
-    SDL_Log("eng_save_scene: wrote %zu entities to %s", sorted.size(), jsonPath.c_str());
+    const auto& ents = doc["entities"];
+    SDL_Log("eng_save_scene: wrote %zu entities to %s", ents.size(), jsonPath.c_str());
     return true;
 }

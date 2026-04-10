@@ -10,6 +10,7 @@
 
 #include "editor_bridge.hpp"
 #include "editor_state.hpp"
+#include "editor_undo.hpp"
 #include "engine/camera.hpp"
 #include "engine/lua/lua_editor_input.hpp"
 #include "engine/constants.hpp"
@@ -177,8 +178,10 @@ static lua_State *create_lua_vm_only()
 
 static void load_default_scene_file_into_g_scene()
 {
+    eng_editor_undo_reset();
     g_scene.clear();
     eng_load_scene(g_scene, s_default_scene_path);
+    eng_editor_undo_save_state();
 }
 
 static void native_request_quit()

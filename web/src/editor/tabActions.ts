@@ -1,6 +1,7 @@
 import type { TabProps } from "@danfessler/react-dockable";
 import type { EngineEntity } from "../engineBridge";
 import { engine } from "../engineProxy";
+import { saveSceneUndoState } from "./sceneUndo";
 
 export type TabMenuActions = NonNullable<TabProps["actions"]>;
 
@@ -41,7 +42,9 @@ export function inspectorTabActions(opts: {
       : opts.behaviorNames.map((name) => ({
           label: name,
           onClick: () => {
-            void engine.runtime.addScript(entityId, name);
+            void engine.runtime.addScript(entityId, name).then(() => {
+              saveSceneUndoState();
+            });
           },
         }));
 

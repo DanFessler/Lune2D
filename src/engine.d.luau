@@ -62,6 +62,7 @@ declare editor: {
 	getSelectedEntityId: () -> number,
 	setSelectedEntity: (id: number?) -> (),
 	pickEntityAt: (x: number, y: number, hitRadius: number?) -> number,
+	saveUndoState: () -> boolean,
 }
 
 -- Editor-time mouse input polling (Luau-space coordinates).

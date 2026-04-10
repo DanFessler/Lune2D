@@ -1,4 +1,5 @@
 #include "editor_state.hpp"
+#include "editor_undo.hpp"
 #include "editor_pick.hpp"
 #include "scene.hpp"
 #include "webview_host.hpp"
@@ -51,6 +52,13 @@ static int l_editor_pickEntityAt(lua_State *L)
     return 1;
 }
 
+static int l_editor_saveUndoState(lua_State *L)
+{
+    bool saved = eng_editor_undo_save_state();
+    lua_pushboolean(L, saved ? 1 : 0);
+    return 1;
+}
+
 void eng_lua_register_editor(lua_State *L)
 {
     lua_newtable(L);
@@ -62,5 +70,7 @@ void eng_lua_register_editor(lua_State *L)
     lua_setfield(L, -2, "setSelectedEntity");
     lua_pushcfunction(L, l_editor_pickEntityAt, "editor.pickEntityAt");
     lua_setfield(L, -2, "pickEntityAt");
+    lua_pushcfunction(L, l_editor_saveUndoState, "editor.saveUndoState");
+    lua_setfield(L, -2, "saveUndoState");
     lua_setglobal(L, "editor");
 }
